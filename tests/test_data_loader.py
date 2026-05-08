@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+
+# Make sure the project root is on Python's import path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import numpy as np
 
 from dataloader import DataLoader
