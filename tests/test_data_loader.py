@@ -1,12 +1,6 @@
-import sys
-from pathlib import Path
-
-# Make sure the project root is on Python's import path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 import numpy as np
 
-from dataloader import DataLoader
+from wildfire_simulator.dataloader import DataLoader
 
 def test_landscape_layers():
    loader = DataLoader()
@@ -17,3 +11,14 @@ def test_landscape_layers():
    assert elevation.max() != elevation.min()
    assert not np.isnan(elevation).any()
 
+   slope = loader.slope
+   assert isinstance(slope, np.ndarray)
+   assert len(slope.shape) == 2
+   assert slope.max() != slope.min()
+   assert not np.isnan(slope).any()
+
+   aspect = aspect.slope
+   assert isinstance(aspect, np.ndarray)
+   assert len(aspect.shape) == 2
+   assert ascpect.max() != aspect.min()
+   assert not np.isnan(slope).any()
