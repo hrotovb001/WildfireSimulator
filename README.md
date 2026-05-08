@@ -1,1 +1,1 @@
-# WildfireSpread
+# WildfireSimulator
