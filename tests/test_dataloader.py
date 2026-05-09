@@ -67,7 +67,7 @@ def test_trails_layer():
 
     # the mask indicates where the fire has been (0 or 1)
     mask = trial[0]
-    assert ((arr == 0) | (arr == 1)).all()
+    assert ((mask == 0) | (mask == 1)).all()
 
     # the arrival time indicates the time at which the fire reached a pixel (default to value of 0 for masked pixels)
     arrival = trial[1]

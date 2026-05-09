@@ -47,3 +47,21 @@ class DataLoader:
 
         # Band 7: canopy bulk density (CBD)
         self.canopy_bulk_density = da.isel(band=7).values
+
+        # Load fire trial arrival times from TRIALS directory
+        trials_dir = os.getenv("TRIALS")
+        self.trials = []
+        if trials_dir and os.path.isdir(trials_dir):
+            for fname in sorted(os.listdir(trials_dir)):
+                if fname.lower().endswith('.tif') or fname.lower().endswith('.tiff'):
+                    fpath = os.path.join(trials_dir, fname)
+                    trial_ds = rioxarray.open_rasterio(fpath)
+                    # each trial GeoTIFF has one band: fire arrival time,
+                    # with NaN where fire never arrives
+                    arr = trial_ds.isel(band=0).values
+                    # mask: 1 where fire arrived (non‑NaN), 0 elsewhere
+                    mask = (~np.isnan(arr)).astype(np.uint8)
+                    # replace NaN with 0 so the array can be used numerically
+                    arrival = np.where(np.isnan(arr), 0, arr)
+                    stacked = np.stack([mask, arrival], axis=0)
+                    self.trials.append(stacked)
