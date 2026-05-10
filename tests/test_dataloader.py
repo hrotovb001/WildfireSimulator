@@ -74,17 +74,27 @@ def test_trails_layer():
     trials = loader.trials
     assert len(loader.trials) > 0
 
-    # each trial has a mask and a fire arrival time channel
+    # each trial has fire, ignition number, windspeed,
+    # winddir, foliar_moisture
     trial = loader.trials[0]
-    assert isinstance(trial, np.ndarray)
-    assert len(trial.shape) == 3
-    assert trial.shape[0] == 2
+    assert isinstance(trial, dict)
+
+    # each fire has a mask and a fire arrival time channel
+    fire = trial["fire"]
+    assert len(fire.shape) == 3
+    assert fire.shape[0] == 2
 
     # the mask indicates where the fire has been (0 or 1)
-    mask = trial[0]
+    mask = fire[0]
     assert ((mask == 0) | (mask == 1)).all()
 
     # the arrival time indicates the time at which the fire reached a pixel (default to value of 0 for masked pixels)
-    arrival = trial[1]
-    assert not np.isnan(arrival).any()
+    arrival = fire[1]
+    assert not np.isnan(fire).any()
+
+    # all other properties are int
+    assert isinstance(trial["ignition"], int)
+    assert isinstance(trial["windspeed"], int)
+    assert isinstance(trial["winddir"], int)
+    assert isinstance(trial["foliar_moisture"], int)
 
