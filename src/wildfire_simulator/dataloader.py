@@ -65,7 +65,26 @@ class DataLoader:
                     # replace NaN with 0 so the array can be used numerically
                     arrival = np.where(np.isnan(arr), 0, arr)
                     stacked = np.stack([mask, arrival], axis=0)
-                    self.trials.append(stacked)
+                    # parse metadata from filename (example: "trail_I0_WS12_WD312_M74.tif")
+                    base = os.path.splitext(os.path.basename(fname))[0]
+                    parts = base.split('_')
+                    # find the ignition number (starts with 'I')
+                    ign_str = next(p for p in parts if p.startswith('I'))
+                    ignition = int(ign_str[1:])
+                    ws_str = next(p for p in parts if p.startswith('WS'))
+                    windspeed = int(ws_str[2:])
+                    wd_str = next(p for p in parts if p.startswith('WD'))
+                    winddir = int(wd_str[2:])
+                    m_str = next(p for p in parts if p.startswith('M'))
+                    foliar_moisture = int(m_str[1:])
+                    trial = {
+                        "fire": stacked,
+                        "ignition": ignition,
+                        "windspeed": windspeed,
+                        "winddir": winddir,
+                        "foliar_moisture": foliar_moisture,
+                    }
+                    self.trials.append(trial)
 
         # Load ignition points from IGNITIONS directory
         ignitions_dir = os.getenv("IGNITIONS")
