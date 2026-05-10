@@ -2,9 +2,9 @@ import numpy as np
 
 from wildfire_simulator.dataloader import DataLoader
 
-def test_landscape_layers():
-   loader = DataLoader()
+loader = DataLoader()
 
+def test_landscape_layers():
    elevation = loader.elevation 
    assert isinstance(elevation, np.ndarray)
    assert len(elevation.shape) == 2
@@ -53,9 +53,24 @@ def test_landscape_layers():
    assert canopy_bulk_density.max() != canopy_bulk_density.min()
    assert not np.isnan(canopy_bulk_density).any()
 
-def test_trails_layer():
-    loader = DataLoader()
+def test_ignitions():
+    ignitions = loader.ignitions
+    assert len(ignitions) > 0
 
+    # the ignition is the pixel coordinate relative to landscape georeference
+    # a given pixel coordinate respresents where the point in the .shp file
+    # aligns with the numpy array for landscape
+    ignition = ignitions[0]
+    assert isinstance(ignition, tuple)
+    assert len(ignition) == 2
+    assert all(isinstance(x, int) for x in ignition)
+
+    y, x = ignition
+    elevation = loader.elevation
+    assert y >= 0 and y < elevation.shape[0]
+    assert x >= 0 and x < elevation.shape[1]
+
+def test_trails_layer():
     trials = loader.trials
     assert len(loader.trials) > 0
 
@@ -72,23 +87,4 @@ def test_trails_layer():
     # the arrival time indicates the time at which the fire reached a pixel (default to value of 0 for masked pixels)
     arrival = trial[1]
     assert not np.isnan(arrival).any()
-
-def test_ignitions():
-    loader = DataLoader()
-
-    ignitions = loader.ignitions
-    assert len(ignitions) > 0
-
-    # the ignition is the pixel coordinate relative to landscape georeference
-    # a given pixel coordinate respresents where the point in the .shp file
-    # aligns with the numpy array for landscape
-    ignition = ignitions[0]
-    assert isinstance(ignition, tuple)
-    assert len(ignition) == 2
-    assert all(isinstance(x, int) for x in ignition)
-
-    y, x = ignition
-    elevation = loader.elevation
-    assert y >= 0 and y < elevation.shape[0]
-    assert x >= 0 and x < elevation.shape[1]
 
