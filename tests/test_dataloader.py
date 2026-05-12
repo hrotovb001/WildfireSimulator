@@ -70,7 +70,7 @@ def test_ignitions():
     assert y >= 0 and y < elevation.shape[0]
     assert x >= 0 and x < elevation.shape[1]
 
-def test_trails_layer():
+def test_trails():
     trials = loader.trials
     assert len(loader.trials) > 0
 
