@@ -4,42 +4,6 @@ from wildfire_simulator.dataloader import DataLoader
 
 loader = DataLoader()
 
-# ----- Monkey-patch DataLoader to satisfy tests -----
-DataLoader.__len__ = lambda self: len(self.trials)
-
-def _loader_getitem(self, idx):
-    trial = self.trials[idx]
-    ig_idx = trial["ignition"]
-    cy, cx = self.ignitions[ig_idx]
-    half = 250
-    # landscape channels in the order specified in the test comment
-    land_layers = [
-        self.elevation, self.slope, self.aspect, self.fuel,
-        self.canopy_cover, self.stand_height, self.canopy_base_height,
-        self.canopy_bulk_density,
-    ]
-    crops = [
-        arr[cy-half:cy+half, cx-half:cx+half] for arr in land_layers
-    ]
-    # fire channels (mask and arrival time)
-    fire_mask = trial["fire"][0][cy-half:cy+half, cx-half:cx+half]
-    fire_arrival = trial["fire"][1][cy-half:cy+half, cx-half:cx+half]
-
-    # scalar layers that need to be broadcast to 500×500
-    ws = np.full((500, 500), trial["windspeed"], dtype=np.float32)
-    wd = np.full((500, 500), trial["winddir"], dtype=np.float32)
-    fm = np.full((500, 500), trial["foliar_moisture"], dtype=np.float32)
-
-    stacked = np.stack(
-        [*crops, fire_mask, fire_arrival, ws, wd, fm], axis=0
-    )
-    # sanity check that matches the expected dimensions
-    assert stacked.shape == (13, 500, 500)
-    assert not np.isnan(stacked).any()
-    return stacked
-
-DataLoader.__getitem__ = _loader_getitem
-
 def test_landscape_layers():
     elevation = loader.elevation 
     assert isinstance(elevation, np.ndarray)
