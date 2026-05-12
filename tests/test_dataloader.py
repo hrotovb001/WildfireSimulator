@@ -5,53 +5,53 @@ from wildfire_simulator.dataloader import DataLoader
 loader = DataLoader()
 
 def test_landscape_layers():
-   elevation = loader.elevation 
-   assert isinstance(elevation, np.ndarray)
-   assert len(elevation.shape) == 2
-   assert elevation.max() != elevation.min()
-   assert not np.isnan(elevation).any()
+    elevation = loader.elevation 
+    assert isinstance(elevation, np.ndarray)
+    assert len(elevation.shape) == 2
+    assert elevation.max() != elevation.min()
+    assert not np.isnan(elevation).any()
 
-   slope = loader.slope
-   assert isinstance(slope, np.ndarray)
-   assert len(slope.shape) == 2
-   assert slope.max() != slope.min()
-   assert not np.isnan(slope).any()
+    slope = loader.slope
+    assert isinstance(slope, np.ndarray)
+    assert len(slope.shape) == 2
+    assert slope.max() != slope.min()
+    assert not np.isnan(slope).any()
 
-   aspect = loader.aspect
-   assert isinstance(aspect, np.ndarray)
-   assert len(aspect.shape) == 2
-   assert aspect.max() != aspect.min()
-   assert not np.isnan(aspect).any()
+    aspect = loader.aspect
+    assert isinstance(aspect, np.ndarray)
+    assert len(aspect.shape) == 2
+    assert aspect.max() != aspect.min()
+    assert not np.isnan(aspect).any()
 
-   fuel = loader.fuel
-   assert isinstance(fuel, np.ndarray)
-   assert len(fuel.shape) == 2
-   assert fuel.max() != fuel.min()
-   assert not np.isnan(fuel).any()
+    fuel = loader.fuel
+    assert isinstance(fuel, np.ndarray)
+    assert len(fuel.shape) == 2
+    assert fuel.max() != fuel.min()
+    assert not np.isnan(fuel).any()
 
-   canopy_cover = loader.canopy_cover
-   assert isinstance(canopy_cover, np.ndarray)
-   assert len(canopy_cover.shape) == 2
-   assert canopy_cover.max() != canopy_cover.min()
-   assert not np.isnan(canopy_cover).any()
+    canopy_cover = loader.canopy_cover
+    assert isinstance(canopy_cover, np.ndarray)
+    assert len(canopy_cover.shape) == 2
+    assert canopy_cover.max() != canopy_cover.min()
+    assert not np.isnan(canopy_cover).any()
 
-   stand_height = loader.stand_height
-   assert isinstance(stand_height, np.ndarray)
-   assert len(stand_height.shape) == 2
-   assert stand_height.max() != stand_height.min()
-   assert not np.isnan(stand_height).any()
+    stand_height = loader.stand_height
+    assert isinstance(stand_height, np.ndarray)
+    assert len(stand_height.shape) == 2
+    assert stand_height.max() != stand_height.min()
+    assert not np.isnan(stand_height).any()
 
-   canopy_base_height = loader.canopy_base_height
-   assert isinstance(canopy_base_height, np.ndarray)
-   assert len(canopy_base_height.shape) == 2
-   assert canopy_base_height.max() != canopy_base_height.min()
-   assert not np.isnan(canopy_base_height).any()
+    canopy_base_height = loader.canopy_base_height
+    assert isinstance(canopy_base_height, np.ndarray)
+    assert len(canopy_base_height.shape) == 2
+    assert canopy_base_height.max() != canopy_base_height.min()
+    assert not np.isnan(canopy_base_height).any()
 
-   canopy_bulk_density = loader.canopy_bulk_density
-   assert isinstance(canopy_bulk_density, np.ndarray)
-   assert len(canopy_bulk_density.shape) == 2
-   assert canopy_bulk_density.max() != canopy_bulk_density.min()
-   assert not np.isnan(canopy_bulk_density).any()
+    canopy_bulk_density = loader.canopy_bulk_density
+    assert isinstance(canopy_bulk_density, np.ndarray)
+    assert len(canopy_bulk_density.shape) == 2
+    assert canopy_bulk_density.max() != canopy_bulk_density.min()
+    assert not np.isnan(canopy_bulk_density).any()
 
 def test_ignitions():
     ignitions = loader.ignitions
@@ -97,4 +97,14 @@ def test_trails():
     assert isinstance(trial["windspeed"], int)
     assert isinstance(trial["winddir"], int)
     assert isinstance(trial["foliar_moisture"], int)
+
+def test_trial_array():
+    assert len(loader) > 0
+    
+    arr = loader[0]
+
+    # 8 landscape, 2 fire, windspeed, winddir and foliar_moisture
+    # frame is centered at the ingition coordinate
+    assert arr.shape == (13, 500, 500)
+    assert not np.isnan(arr).any()
 
