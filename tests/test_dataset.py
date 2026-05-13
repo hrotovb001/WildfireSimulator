@@ -108,6 +108,9 @@ def test_trails():
     assert isinstance(trial["winddir"], int)
     assert isinstance(trial["foliar_moisture"], int)
 
+    # file path where trial comes from
+    assert isinstance(trial["file_path"], str)
+
 def test_trial_array():
     assert len(dataset) > 0
     
