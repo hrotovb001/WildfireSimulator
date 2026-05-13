@@ -88,6 +88,7 @@ class DataLoader:
                     m_str = next(p for p in parts if p.startswith('M'))
                     foliar_moisture = int(m_str[1:])
                     trial = {
+                        "file_path": fpath,
                         "fire": stacked,
                         "ignition": ignition,
                         "windspeed": windspeed,
