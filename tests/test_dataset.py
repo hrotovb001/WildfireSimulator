@@ -70,14 +70,16 @@ def test_ignitions():
     assert len(ignitions) > 0
     assert isinstance(ignitions, dict)
 
-    # the ignition is the pixel coordinate relative to landscape georeference
-    # a given pixel coordinate respresents where the point in the .shp file
-    # aligns with the numpy array for landscape
-    ignition = next(iter(ignitions))
-    assert isinstance(ignition, tuple)
-    assert len(ignition) == 2
-    assert all(isinstance(x, int) for x in ignition)
+    # verify that every key is an int and every value is a valid pixel
+    for k, v in ignitions.items():
+        assert isinstance(k, int)
+        assert isinstance(v, tuple)
+        assert len(v) == 2
+        assert all(isinstance(x, int) for x in v)
 
+    # pick the first ignition and confirm it lies inside the landscape
+    first_key = next(iter(ignitions))
+    ignition = ignitions[first_key]
     y, x = ignition
     elevation = dataset.elevation
     assert y >= 0 and y < elevation.shape[0]

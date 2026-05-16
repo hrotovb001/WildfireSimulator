@@ -99,7 +99,7 @@ class DataLoader:
 
         # Load ignition points from IGNITIONS directory
         ignitions_dir = os.getenv("IGNITIONS")
-        self.ignitions = []
+        self.ignitions = {}
         if ignitions_dir and os.path.isdir(ignitions_dir):
             from rasterio.transform import rowcol
             # Get transform and CRS from the already opened landscape dataset
@@ -107,6 +107,12 @@ class DataLoader:
             landscape_crs = self._landscape.rio.crs
             for fname in sorted(os.listdir(ignitions_dir)):
                 if not (fname.lower().endswith('.shp') and fname.startswith('ignition_')):
+                    continue
+                # Extract ignition number from filename "ignition_<N>.shp"
+                try:
+                    ign_num = int(fname[len('ignition_'):-4])
+                except ValueError:
+                    # Skip files with unexpected naming
                     continue
                 fpath = os.path.join(ignitions_dir, fname)
                 gdf = gpd.read_file(fpath)
@@ -121,7 +127,7 @@ class DataLoader:
                 # Convert to pixel coordinates (row, col) using the affine transform
                 rows, cols = rowcol(transform, [geom.x], [geom.y])
                 pixel = (int(rows[0]), int(cols[0]))
-                self.ignitions.append(pixel)
+                self.ignitions[ign_num] = pixel
 
     def __len__(self):
         return len(self.trials)
