@@ -40,5 +40,6 @@ class WildfireDataset(Dataset):
 
     def __getitem__(self, idx):
         # Delegate to the DataLoader which already returns the expected
-        # (13, 500, 500) numpy array.
-        return self._loader[idx]
+        # (13, 500, 500) numpy array and then convert to a torch.Tensor.
+        arr = self._loader[idx]
+        return torch.from_numpy(arr).to(torch.float32)
