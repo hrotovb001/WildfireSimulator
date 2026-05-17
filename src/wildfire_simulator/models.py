@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from functools import partial
+import math
 
 import timm
 from timm.layers import trunc_normal_tf_
