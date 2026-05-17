@@ -8,6 +8,11 @@ jobs:
     strategy:
       max-parallel: 5
 
+    env:
+      LANDSCAPE: ${{ github.workspace }}/tests/data/palisades.tif
+      TRIALS: ${{ github.workspace }}/tests/data/Trials/
+      IGNITIONS: ${{ github.workspace }}/tests/data/Ignitions/
+
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python 3.14
