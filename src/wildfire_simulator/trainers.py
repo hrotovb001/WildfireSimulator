@@ -92,6 +92,9 @@ class ForwardBurnTrainer:
 
             self.optimizer.zero_grad()
             preds_padded = self.model(inputs_padded)
+            # Handle possible tuple/list output from model
+            if isinstance(preds_padded, (tuple, list)):
+                preds_padded = preds_padded[0]
             # Crop predictions back to the original spatial size
             preds = preds_padded[:, :, :orig_h, :orig_w]
             loss = self.loss_fn(preds, targets)
@@ -135,6 +138,9 @@ class ForwardBurnTrainer:
                 targets_padded, _, _ = _pad_to_multiple(targets, multiple=32)
 
                 preds_padded = self.model(inputs_padded)
+                # Handle possible tuple/list output from model
+                if isinstance(preds_padded, (tuple, list)):
+                    preds_padded = preds_padded[0]
                 # Crop predictions back to the original spatial size
                 preds = preds_padded[:, :, :orig_h, :orig_w]
                 loss = self.loss_fn(preds, targets)
