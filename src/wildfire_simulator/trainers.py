@@ -1,7 +1,20 @@
 import torch
+import torch.nn.functional as F
 import random
 
 from wildfire_simulator.forward_burn_process import ForwardBurnProcess
+
+
+def _pad_to_multiple(tensor, multiple=32):
+    """Pad the last two spatial dimensions to the next multiple of `multiple`."""
+    _, _, h, w = tensor.shape
+    pad_h = (multiple - h % multiple) % multiple
+    pad_w = (multiple - w % multiple) % multiple
+    if pad_h == 0 and pad_w == 0:
+        return tensor, h, w
+    # pad last dim (width) then second-last (height)
+    padded = F.pad(tensor, (0, pad_w, 0, pad_h))
+    return padded, h, w
 
 
 class ForwardBurnTrainer:
@@ -72,8 +85,15 @@ class ForwardBurnTrainer:
             inputs = torch.cat(input_frames, dim=0)                 # (N, 13, H, W)
             targets = torch.cat(target_frames, dim=0)               # (N, 2, H, W)
 
+            # Pad to a multiple of 32 so the model's internal attention gates
+            # always receive tensors with compatible spatial sizes.
+            inputs_padded, orig_h, orig_w = _pad_to_multiple(inputs, multiple=32)
+            targets_padded, _, _ = _pad_to_multiple(targets, multiple=32)
+
             self.optimizer.zero_grad()
-            preds = self.model(inputs)
+            preds_padded = self.model(inputs_padded)
+            # Crop predictions back to the original spatial size
+            preds = preds_padded[:, :, :orig_h, :orig_w]
             loss = self.loss_fn(preds, targets)
             loss.backward()
             self.optimizer.step()
@@ -109,7 +129,14 @@ class ForwardBurnTrainer:
                 inputs = torch.cat(input_frames, dim=0)
                 targets = torch.cat(target_frames, dim=0)
 
-                preds = self.model(inputs)
+                # Pad to a multiple of 32 so the model's internal attention gates
+                # always receive tensors with compatible spatial sizes.
+                inputs_padded, orig_h, orig_w = _pad_to_multiple(inputs, multiple=32)
+                targets_padded, _, _ = _pad_to_multiple(targets, multiple=32)
+
+                preds_padded = self.model(inputs_padded)
+                # Crop predictions back to the original spatial size
+                preds = preds_padded[:, :, :orig_h, :orig_w]
                 loss = self.loss_fn(preds, targets)
                 total_loss += loss.item() * N
 
