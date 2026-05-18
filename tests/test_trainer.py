@@ -71,7 +71,7 @@ def test_trainer(dataset):
         train_loader=train_loader,
         val_loader=val_loader,
         callbacks=[checkpoint],
-        epochs=1,
+        epochs=3,
         dt=30,
         max_t=1440
     )
