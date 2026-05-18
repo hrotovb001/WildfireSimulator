@@ -58,32 +58,12 @@ class ForwardBurnTrainer:
         for batch in self.train_loader:
             batch = batch.to(self.device)
             N = batch.size(0)
-
-            input_frames = []
-            target_frames = []
-
-            for i in range(N):
-                frame = batch[i]               # (13, H, W)
-                arrival_times = frame[9]        # arrival time channel
-
-                max_arr = arrival_times.max().item()
-                upper = min(max_arr, self.max_t - self.dt)
-                if upper <= 0:
-                    t = 0.0
-                else:
-                    t = random.uniform(0, upper)
-
-                in_frame = self.burner(frame, t)          # (13, H, W)
-                out_frame = self.burner(frame, t + self.dt)
-
-                # Model only needs to predict fire mask (ch8) and arrival (ch9)
-                target = torch.stack([out_frame[8], out_frame[9]], dim=0)   # (2, H, W)
-
-                input_frames.append(in_frame.unsqueeze(0))          # (1, 13, H, W)
-                target_frames.append(target.unsqueeze(0))           # (1, 2, H, W)
-
-            inputs = torch.cat(input_frames, dim=0)                 # (N, 13, H, W)
-            targets = torch.cat(target_frames, dim=0)               # (N, 2, H, W)
+            # Use the static method to create training pairs (includes random t per sample)
+            inputs_14, targets = ForwardBurnTrainer.prepare_batch(
+                batch=batch, dt=self.dt, max_t=self.max_t
+            )
+            # Model expects 13 input channels (no t channel)
+            inputs = inputs_14[:, :13, :, :]
 
             # Pad to a multiple of 32 so the model's internal attention gates
             # always receive tensors with compatible spatial sizes.
@@ -110,27 +90,20 @@ class ForwardBurnTrainer:
         total_loss = 0.0
         n_samples = len(self.val_loader.dataset)
 
+        # Initialise a single generator to keep evaluation deterministic across calls
+        val_gen = torch.Generator(device=torch.device('cpu'))
+        val_gen.manual_seed(0)
+
         with torch.no_grad():
             for batch in self.val_loader:
                 batch = batch.to(self.device)
                 N = batch.size(0)
 
-                input_frames = []
-                target_frames = []
-
-                for i in range(N):
-                    frame = batch[i]
-                    t = 0.0  # deterministic evaluation
-                    in_frame = self.burner(frame, t)
-                    out_frame = self.burner(frame, t + self.dt)
-
-                    target = torch.stack([out_frame[8], out_frame[9]], dim=0)
-
-                    input_frames.append(in_frame.unsqueeze(0))
-                    target_frames.append(target.unsqueeze(0))
-
-                inputs = torch.cat(input_frames, dim=0)
-                targets = torch.cat(target_frames, dim=0)
+                inputs_14, targets = ForwardBurnTrainer.prepare_batch(
+                    batch=batch, dt=self.dt, max_t=self.max_t, generator=val_gen
+                )
+                # Model expects 13 input channels
+                inputs = inputs_14[:, :13, :, :]
 
                 # Pad to a multiple of 32 so the model's internal attention gates
                 # always receive tensors with compatible spatial sizes.
@@ -160,3 +133,59 @@ class ForwardBurnTrainer:
         """Return the current validation loss as a dict."""
         val_loss = self._validate()
         return {'val_loss': val_loss}
+
+    @staticmethod
+    def prepare_batch(batch, dt, max_t, generator=None):
+        """
+        Prepare training inputs and targets from a batch of frames (N,13,H,W).
+
+        For each sample a random burn time `t` is sampled up to
+        min(arrival_max, max_t - dt).  When `generator` is provided a torch
+        Generator is used for reproducibility.  Returns `(inputs, targets)`:
+
+        - inputs: (N,14,H,W) where the first 13 channels are the frame burned
+          at time `t` and the 14th channel is a constant equal to `t`.
+        - targets: (N,2,H,W) containing the fire mask (channel 8) and arrival
+          (channel 9) of the frame burned at time `t + dt`.
+        """
+
+        burner = ForwardBurnProcess()
+        N = batch.size(0)
+        device = batch.device
+        dtype = batch.dtype
+        input_frames = []
+        target_frames = []
+
+        for i in range(N):
+            frame = batch[i]                     # (13, H, W)
+            arrival = frame[9]                   # arrival times
+            max_arr = arrival.max().item()
+            upper = min(max_arr, max_t - dt)
+
+            if upper <= 0:
+                t = 0.0
+            else:
+                # Use the provided torch Generator for reproducible randomness,
+                # otherwise fall back to the built-in random module.
+                if generator is not None:
+                    r = torch.rand(1, generator=generator, device=torch.device('cpu')).item()
+                    t = upper * r
+                else:
+                    t = random.uniform(0, upper)
+
+            in_frame = burner(frame, t)
+            out_frame = burner(frame, t + dt)
+
+            # Build the 14-channel input: add t as a constant channel
+            t_channel = torch.full((1, in_frame.shape[-2], in_frame.shape[-1]),
+                                   t, dtype=dtype, device=device)
+            in_with_t = torch.cat([in_frame, t_channel], dim=0)   # (14, H, W)
+            target = torch.stack([out_frame[8], out_frame[9]], dim=0)   # (2, H, W)
+
+            input_frames.append(in_with_t.unsqueeze(0))   # (1,14,H,W)
+            target_frames.append(target.unsqueeze(0))     # (1,2,H,W)
+
+        inputs = torch.cat(input_frames, dim=0)   # (N, 14, H, W)
+        targets = torch.cat(target_frames, dim=0) # (N, 2, H, W)
+
+        return inputs, targets
