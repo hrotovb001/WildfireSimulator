@@ -9,6 +9,26 @@ from wildfire_simulator.models import MK_UNet_Regression
 from wildfire_simulator.callbacks import ModelCheckpoint
 from wildfire_simulator.trainers import ForwardBurnTrainer
 
+def test_prepare_batch(dataset):
+    g = torch.Generator().manual_seed(42)
+
+    # random t with min(max(arrival_time), max_t - dt)  
+    # input_tensor uses burner at t
+    # output_tensor uses burner at t + dt
+    # each item of batch uses a different t
+    input_tensor, output_tensor = ForwardBurnTrainer.prepare_batch(
+        batch=torch.cat([dataset[0].unsqueeze(0), dataset[1].unsqueeze(0)]),
+        dt=30,
+        max_t=1440,
+        generator=g
+    )
+
+    # the 14th channel is t broadcasted to all 512 x 512
+    # the data is 500, 500 in last two dims but it must be
+    # zero padded to a multiple of 32
+    assert input_tensor.shape == (2, 14, 512, 512)
+    assert output_tensor.shape == (2, 2, 512, 512)
+
 def test_trainer(dataset):
     train_loader = DataLoader(
         dataset=dataset,
@@ -26,7 +46,7 @@ def test_trainer(dataset):
     )
 
     model = MK_UNet_Regression(
-        in_channels=13,
+        in_channels=14,
         out_channels=2,
         channels=[16, 32, 64, 96, 160],
         final_activation='relu'
@@ -44,13 +64,6 @@ def test_trainer(dataset):
         weight_decay=1e-4
     )
 
-    # input tensor in training is ForwardBurnProcess with random t
-    # min(max(arrival_time), max_t - dt)  
-    # can look to test_model for reference on how burner is used
-    # dt is the time difference between the input and output tensor
-    # output tensor uses burner with t_out = t + dt
-    # tensors must be 256 by 256 or 512 by 512 in the last 2 dims
-    # can use zero padding
     trainer = ForwardBurnTrainer(
         model=model,
         optimizer=optimizer,
