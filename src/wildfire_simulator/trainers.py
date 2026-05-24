@@ -17,21 +17,25 @@ def _pad_to_multiple(tensor, multiple=32):
     return padded, h, w
 
 
-class BurnerBatchCollator:
+class BurnerBatchProcessor:
     def __init__(
         self,
         burner,
         dt,
-        max_t,
-        generator
+        max_t
     ):
         self.burner = burner
         self.dt = dt
         self.max_t = max_t
-        self.generator = generator
+        self.generator = torch.Generator()
 
-    def __call__(self, batch):
-        N = len(batch)
+    def __call__(self, batch, epoch, batch_idx, eval):
+        if eval:
+            epoch = 0
+
+        self.generator.manual_seed(epoch * 10_000 + batch_idx)
+
+        N = batch.size(0)
         input_frames = []
         target_frames = []
 
@@ -44,7 +48,7 @@ class BurnerBatchCollator:
             if upper <= 0:
                 t = 0.0
             else:
-                r = torch.rand(1, generator=self.generator, device=torch.device('cpu')).item()
+                r = torch.rand(1, generator=self.generator, device='cpu').item()
                 t = upper * r
 
             in_frame = self.burner(frame, t)
@@ -53,7 +57,7 @@ class BurnerBatchCollator:
             # Build the 14-channel input: add t as a constant channel
             t_channel = torch.full((1, in_frame.shape[-2], in_frame.shape[-1]), t)
             in_with_t = torch.cat([in_frame, t_channel], dim=0)   # (14, H, W)
-            target = torch.stack([out_frame[8], out_frame[9]], dim=0)   # (2, H, W)
+            target = torch.stack([out_frame[0], out_frame[1]], dim=0)   # (2, H, W)
 
             input_frames.append(in_with_t.unsqueeze(0))   # (1,14,H,W)
             target_frames.append(target.unsqueeze(0))     # (1,2,H,W)
@@ -77,14 +81,16 @@ class ForwardBurnTrainer:
         loss_fn,
         train_loader,
         val_loader,
+        batch_processor,
         callbacks=None,
-        epochs=1,
+        epochs=1
     ):
         self.model = model
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.train_loader = train_loader
         self.val_loader = val_loader
+        self.batch_processor = batch_processor
         self.callbacks = callbacks or []
         self.epochs = epochs
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -96,8 +102,8 @@ class ForwardBurnTrainer:
         n_samples = len(self.train_loader.dataset)
 
         pbar = tqdm(self.train_loader, desc=f"Epoch {epoch}")
-        for batch in pbar:
-            inputs, targets = batch
+        for batch_idx, batch in enumerate(pbar):
+            inputs, targets = self.batch_processor(batch, epoch=epoch, batch_idx=batch_idx, eval=False)
             inputs, targets = inputs.to(self.device), targets.to(self.device)
 
             N = inputs.size(0)
@@ -120,8 +126,8 @@ class ForwardBurnTrainer:
 
         pbar = tqdm(self.val_loader, desc="Validating")
         with torch.no_grad():
-            for batch in pbar:
-                inputs, targets = batch
+            for batch_idx, batch in enumerate(pbar):
+                inputs, targets = self.batch_processor(batch, epoch=epoch, batch_idx=batch_idx, eval=True)
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
 
                 N = inputs.size(0)

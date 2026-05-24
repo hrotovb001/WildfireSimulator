@@ -1,3 +1,13 @@
+"""
+MK-UNet implementation.
+
+If you use this code, please cite:
+
+Rahman, Md Mostafijur and Marculescu, Radu.
+"Mk-UNet: Multi-kernel Lightweight CNN for Medical Image Segmentation."
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV), 2025, pp. 1042–1051.
+"""
+
 import torch
 from torch import nn
 import torch.nn.functional as F
