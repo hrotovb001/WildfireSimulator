@@ -9,26 +9,20 @@ from wildfire_simulator.callbacks import ModelCheckpoint
 from wildfire_simulator.datasets import WildfireDataset
 from wildfire_simulator.forward_burn_process import ForwardBurnProcess
 from wildfire_simulator.models import MK_UNet_Regression
-from wildfire_simulator.trainers import ForwardBurnTrainer, BurnerBatchCollator
+from wildfire_simulator.trainers import ForwardBurnTrainer, BurnerBatchProcessor
 
-def test_batch_collator(dataloader):
+def test_batch_processor(dataloader):
     dataset = WildfireDataset(dataloader)
 
     burner = ForwardBurnProcess()
-    g = torch.Generator().manual_seed(42)
 
     # random t with min(max(arrival_time), max_t - dt)  
     # input_tensor uses burner at t
     # output_tensor uses burner at t + dt
     # each item of batch uses a different t
-    collator = BurnerBatchCollator(
-        burner=burner,
-        dt=30,
-        max_t=1440,
-        generator=g
-    )
+    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, max_t=1440)
     batch = torch.stack([dataset[0], dataset[1]])
-    input_tensor, output_tensor = collator(batch)
+    input_tensor, output_tensor = batch_processor(batch, epoch=0, batch_idx=0, eval=False)
 
     # the 14th channel is t broadcasted to all 512 x 512
     # the data is 500, 500 in last two dims but it must be
@@ -36,25 +30,39 @@ def test_batch_collator(dataloader):
     assert input_tensor.shape == (2, 14, 512, 512)
     assert output_tensor.shape == (2, 2, 512, 512)
 
+    input_tensor2, output_tensor2 = batch_processor(batch, epoch=0, batch_idx=0, eval=False)
+    assert torch.equal(input_tensor, input_tensor2)
+    assert torch.equal(output_tensor, output_tensor2)
+    
+    input_tensor3, output_tensor3 = batch_processor(batch, epoch=0, batch_idx=1, eval=False)
+    assert not torch.equal(input_tensor, input_tensor3)
+    assert not torch.equal(output_tensor, output_tensor3)
+
+    input_tensor4, output_tensor4 = batch_processor(batch, epoch=1, batch_idx=0, eval=False)
+    assert not torch.equal(input_tensor, input_tensor4)
+    assert not torch.equal(output_tensor, output_tensor4)
+
+    input_tensor5, output_tensor5 = batch_processor(batch, epoch=1, batch_idx=0, eval=True)
+    assert torch.equal(input_tensor, input_tensor5)
+    assert torch.equal(output_tensor, output_tensor5)
+
+    input_tensor6, output_tensor6 = batch_processor(batch, epoch=1, batch_idx=1, eval=True)
+    assert not torch.equal(input_tensor, input_tensor6)
+    assert not torch.equal(output_tensor, output_tensor6)
+
+
 def test_trainer(dataloader):
     dataset = WildfireDataset(dataloader)
 
     burner = ForwardBurnProcess()
-    g = torch.Generator().manual_seed(42)
 
-    collator = BurnerBatchCollator(
-        burner=burner,
-        dt=30,
-        max_t=1440,
-        generator=g
-    )
+    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, max_t=1440)
 
     train_loader = DataLoader(
         dataset=dataset,
         batch_size=1,
         shuffle=True,
-        num_workers=0,
-        collate_fn=collator
+        num_workers=0
     )
 
     val_loader = DataLoader(
@@ -62,8 +70,7 @@ def test_trainer(dataloader):
         batch_size=64,
         shuffle=False,
         drop_last=False,
-        num_workers=0,
-        collate_fn=collator
+        num_workers=0
     )
 
     model = MK_UNet_Regression(
@@ -91,6 +98,7 @@ def test_trainer(dataloader):
         loss_fn=nn.L1Loss(),
         train_loader=train_loader,
         val_loader=val_loader,
+        batch_processor=batch_processor,
         callbacks=[checkpoint],
         epochs=3
     )
