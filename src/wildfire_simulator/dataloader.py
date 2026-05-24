@@ -4,9 +4,8 @@ import rioxarray
 import geopandas as gpd
 from dotenv import load_dotenv
 
-class DataLoader:
-    """Loads landscape GeoTIFF (path from LANDSCAPE env variable) and makes
-    elevation, slope, and aspect available as 2‑D numpy arrays."""
+class WildfireDataLoader:
+    """Loads landscape and trial GeoTIFFs (path from LANDSCAPE and TRIALS env variable) as well as ignition shape files (from IGNITIONS)"""
 
     def __init__(self):
         # Load environment from .env file
@@ -129,39 +128,3 @@ class DataLoader:
                 pixel = (int(rows[0]), int(cols[0]))
                 self.ignitions[ign_num] = pixel
 
-    def __len__(self):
-        return len(self.trials)
-
-    def __getitem__(self, idx):
-        trial = self.trials[idx]
-        ig_idx = trial["ignition"]
-        cy, cx = self.ignitions[ig_idx]
-        half = 250
-        # 8 landscape layers in order
-        land_layers = [
-            self.elevation, self.slope, self.aspect, self.fuel,
-            self.canopy_cover, self.stand_height, self.canopy_base_height,
-            self.canopy_bulk_density,
-        ]
-        crops = [
-            np.asarray(arr[cy-half:cy+half, cx-half:cx+half], dtype=np.float32)
-            for arr in land_layers
-        ]
-        # 2 fire channels (mask and arrival time)
-        fire_mask = np.asarray(
-            trial["fire"][0][cy-half:cy+half, cx-half:cx+half],
-            dtype=np.float32,
-        )
-        fire_arr = np.asarray(
-            trial["fire"][1][cy-half:cy+half, cx-half:cx+half],
-            dtype=np.float32,
-        )
-        # scalar channels broadcast to 500×500
-        ws = np.full((500, 500), trial["windspeed"], dtype=np.float32)
-        wd = np.full((500, 500), trial["winddir"], dtype=np.float32)
-        fm = np.full((500, 500), trial["foliar_moisture"], dtype=np.float32)
-        # stack all 13 channels
-        stacked = np.stack(
-            [*crops, fire_mask, fire_arr, ws, wd, fm], axis=0
-        )
-        return stacked

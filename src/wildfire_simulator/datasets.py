@@ -2,32 +2,19 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from .dataloader import DataLoader
+from .dataloader import WildfireDataLoader
 
 
 class WildfireDataset(Dataset):
-    """Thin PyTorch Dataset wrapper around DataLoader."""
-
-    def __init__(self):
-        # Create the underlying DataLoader instance and expose its attributes
-        self._loader = DataLoader()
-        self.elevation = self._loader.elevation
-        self.slope = self._loader.slope
-        self.aspect = self._loader.aspect
-        self.fuel = self._loader.fuel
-        self.canopy_cover = self._loader.canopy_cover
-        self.stand_height = self._loader.stand_height
-        self.canopy_base_height = self._loader.canopy_base_height
-        self.canopy_bulk_density = self._loader.canopy_bulk_density
-        self.ignitions = self._loader.ignitions
-        self.trials = self._loader.trials
+    def __init__(self, dataloader):
+        self.loader = dataloader
 
         # Compute channel-wise min and max across all trials/frames for normalization
         n_channels = 13
         min_val = np.full(n_channels,  np.inf)
         max_val = np.full(n_channels, -np.inf)
         for i in range(self.__len__()):
-            arr = self._loader[i]
+            arr = self._load_raw_channels(i)
             frame_min = np.min(arr, axis=(1, 2))
             frame_max = np.max(arr, axis=(1, 2))
             min_val = np.minimum(min_val, frame_min)
@@ -35,11 +22,52 @@ class WildfireDataset(Dataset):
         self.min_val = min_val
         self.max_val = max_val
 
+    def _load_raw_channels(self, idx):
+        trial = self.loader.trials[idx]
+        ig_idx = trial["ignition"]
+        cy, cx = self.loader.ignitions[ig_idx]
+        half = 250
+
+        # 8 landscape layers in order
+        land_layers = [
+            self.loader.elevation,
+            self.loader.slope,
+            self.loader.aspect,
+            self.loader.fuel,
+            self.loader.canopy_cover,
+            self.loader.stand_height,
+            self.loader.canopy_base_height,
+            self.loader.canopy_bulk_density
+        ]
+        crops = [
+            np.asarray(arr[cy-half:cy+half, cx-half:cx+half], dtype=np.float32)
+            for arr in land_layers
+        ]
+
+        # 2 fire channels (mask and arrival time)
+        fire_mask = np.asarray(
+            trial["fire"][0][cy-half:cy+half, cx-half:cx+half],
+            dtype=np.float32,
+        )
+        fire_arr = np.asarray(
+            trial["fire"][1][cy-half:cy+half, cx-half:cx+half],
+            dtype=np.float32,
+        )
+
+        # scalar channels broadcast to 500×500
+        ws = np.full((500, 500), trial["windspeed"], dtype=np.float32)
+        wd = np.full((500, 500), trial["winddir"], dtype=np.float32)
+        fm = np.full((500, 500), trial["foliar_moisture"], dtype=np.float32)
+        # stack all 13 channels
+        stacked = np.stack(
+            [fire_mask, fire_arr, *crops, ws, wd, fm], axis=0
+        )
+
+        return stacked
+
     def __len__(self):
-        return len(self.trials)
+        return len(self.loader.trials)
 
     def __getitem__(self, idx):
-        # Delegate to the DataLoader which already returns the expected
-        # (13, 500, 500) numpy array and then convert to a torch.Tensor.
-        arr = self._loader[idx]
-        return torch.from_numpy(arr).to(torch.float32)
+        channels = self._load_raw_channels(idx)
+        return torch.from_numpy(channels).to(torch.float32)
