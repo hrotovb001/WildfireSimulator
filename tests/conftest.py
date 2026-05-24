@@ -1,6 +1,6 @@
 import pytest
-from wildfire_simulator.datasets import WildfireDataset
+from wildfire_simulator.datasets import WildfireDataLoader
 
 @pytest.fixture(scope="session")
-def dataset():
-    return WildfireDataset()
+def dataloader():
+    return WildfireDataLoader()

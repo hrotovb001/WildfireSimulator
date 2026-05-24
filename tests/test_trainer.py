@@ -5,23 +5,30 @@ from pathlib import Path
 import shutil
 import re
 
-from wildfire_simulator.models import MK_UNet_Regression
 from wildfire_simulator.callbacks import ModelCheckpoint
-from wildfire_simulator.trainers import ForwardBurnTrainer
+from wildfire_simulator.datasets import WildfireDataset
+from wildfire_simulator.forward_burn_process import ForwardBurnProcess
+from wildfire_simulator.models import MK_UNet_Regression
+from wildfire_simulator.trainers import ForwardBurnTrainer, BurnerBatchCollator
 
-def test_prepare_batch(dataset):
+def test_batch_collator(dataloader):
+    dataset = WildfireDataset(dataloader)
+
+    burner = ForwardBurnProcess()
     g = torch.Generator().manual_seed(42)
 
     # random t with min(max(arrival_time), max_t - dt)  
     # input_tensor uses burner at t
     # output_tensor uses burner at t + dt
     # each item of batch uses a different t
-    input_tensor, output_tensor = ForwardBurnTrainer.prepare_batch(
-        batch=torch.cat([dataset[0].unsqueeze(0), dataset[1].unsqueeze(0)]),
+    collator = BurnerBatchCollator(
+        burner=burner,
         dt=30,
         max_t=1440,
         generator=g
     )
+    batch = torch.stack([dataset[0], dataset[1]])
+    input_tensor, output_tensor = collator(batch)
 
     # the 14th channel is t broadcasted to all 512 x 512
     # the data is 500, 500 in last two dims but it must be
@@ -29,12 +36,25 @@ def test_prepare_batch(dataset):
     assert input_tensor.shape == (2, 14, 512, 512)
     assert output_tensor.shape == (2, 2, 512, 512)
 
-def test_trainer(dataset):
+def test_trainer(dataloader):
+    dataset = WildfireDataset(dataloader)
+
+    burner = ForwardBurnProcess()
+    g = torch.Generator().manual_seed(42)
+
+    collator = BurnerBatchCollator(
+        burner=burner,
+        dt=30,
+        max_t=1440,
+        generator=g
+    )
+
     train_loader = DataLoader(
         dataset=dataset,
         batch_size=1,
         shuffle=True,
-        num_workers=4,
+        num_workers=0,
+        collate_fn=collator
     )
 
     val_loader = DataLoader(
@@ -42,7 +62,8 @@ def test_trainer(dataset):
         batch_size=64,
         shuffle=False,
         drop_last=False,
-        num_workers=4,
+        num_workers=0,
+        collate_fn=collator
     )
 
     model = MK_UNet_Regression(
@@ -71,9 +92,7 @@ def test_trainer(dataset):
         train_loader=train_loader,
         val_loader=val_loader,
         callbacks=[checkpoint],
-        epochs=3,
-        dt=30,
-        max_t=1440
+        epochs=3
     )
 
     eval_before = trainer.evaluate()

@@ -1,10 +1,13 @@
 import torch
 import torch.nn.functional as F
 
-from wildfire_simulator.models import MK_UNet_Regression
+from wildfire_simulator.datasets import WildfireDataset
 from wildfire_simulator.forward_burn_process import ForwardBurnProcess
+from wildfire_simulator.models import MK_UNet_Regression
 
-def test_model(dataset):
+def test_model(dataloader):
+    dataset = WildfireDataset(dataloader)
+
     model = MK_UNet_Regression(
         in_channels=14,
         out_channels=2,
