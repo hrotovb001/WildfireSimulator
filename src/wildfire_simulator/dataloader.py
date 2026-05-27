@@ -4,12 +4,83 @@ import rioxarray
 import geopandas as gpd
 from dotenv import load_dotenv
 
+class TrialFileLoader:
+    """Loads data of trial file as a dict"""
+
+    def load(self, file_path):
+        trial_ds = rioxarray.open_rasterio(file_path)
+
+        # each trial GeoTIFF has one band: fire arrival time,
+        # with NaN where fire never arrives
+        arr = trial_ds.isel(band=0).values
+
+        # treat -9999 as nodata (same as NaN)
+        arr[arr == -9999] = np.nan
+
+        # mask: 1 where fire arrived (non‑NaN), 0 elsewhere
+        mask = (~np.isnan(arr)).astype(np.uint8)
+
+        # replace NaN with 0 so the array can be used numerically
+        arrival = np.where(np.isnan(arr), 0, arr)
+        stacked = np.stack([mask, arrival], axis=0)
+
+        # parse metadata from filename (example: "trail_I0_WS12_WD312_M74.tif")
+        base = os.path.splitext(os.path.basename(file_path))[0]
+        parts = base.split('_')
+
+        # extract data from file name
+        ign_str = next(p for p in parts if p.startswith('I'))
+        ignition = int(ign_str[1:])
+        ws_str = next(p for p in parts if p.startswith('WS'))
+        windspeed = int(ws_str[2:])
+        wd_str = next(p for p in parts if p.startswith('WD'))
+        winddir = int(wd_str[2:])
+        m_str = next(p for p in parts if p.startswith('M'))
+        foliar_moisture = int(m_str[1:])
+
+        return {
+            "file_path": file_path,
+            "fire": stacked,
+            "ignition": ignition,
+            "windspeed": windspeed,
+            "winddir": winddir,
+            "foliar_moisture": foliar_moisture,
+        }
+
+
+class TrialCollection:
+    """fetch all the trial file paths and then fetch the data as needed using the file loader"""
+
+    def __init__(self, loader):
+        # Load environment from .env file
+        load_dotenv()
+
+        self.loader = loader
+
+        # Load fire trial arrival times from TRIALS directory
+        trials_dir = os.getenv("TRIALS")
+        self.files = []
+        if trials_dir and os.path.isdir(trials_dir):
+            for fname in sorted(os.listdir(trials_dir)):
+                if fname.lower().endswith('.tif') or fname.lower().endswith('.tiff'):
+                    fpath = os.path.join(trials_dir, fname)
+                    self.files.append(fpath)
+
+    def __len__(self):
+        return len(self.files)
+    
+    def __getitem__(self, idx):
+        return self.loader.load(self.files[idx])
+
+
 class WildfireDataLoader:
     """Loads landscape and trial GeoTIFFs (path from LANDSCAPE and TRIALS env variable) as well as ignition shape files (from IGNITIONS)"""
 
-    def __init__(self):
+    def __init__(self, trials):
         # Load environment from .env file
         load_dotenv()
+
+        self.trials = trials
 
         tif_path = os.getenv("LANDSCAPE")
         if not tif_path:
@@ -55,46 +126,6 @@ class WildfireDataLoader:
         # Band 7: canopy bulk density (CBD)
         self.canopy_bulk_density = da.isel(band=7).values
         self.canopy_bulk_density[self.canopy_bulk_density == -9999] = 0
-
-        # Load fire trial arrival times from TRIALS directory
-        trials_dir = os.getenv("TRIALS")
-        self.trials = []
-        if trials_dir and os.path.isdir(trials_dir):
-            for fname in sorted(os.listdir(trials_dir)):
-                if fname.lower().endswith('.tif') or fname.lower().endswith('.tiff'):
-                    fpath = os.path.join(trials_dir, fname)
-                    trial_ds = rioxarray.open_rasterio(fpath)
-                    # each trial GeoTIFF has one band: fire arrival time,
-                    # with NaN where fire never arrives
-                    arr = trial_ds.isel(band=0).values
-                    # treat -9999 as nodata (same as NaN)
-                    arr[arr == -9999] = np.nan
-                    # mask: 1 where fire arrived (non‑NaN), 0 elsewhere
-                    mask = (~np.isnan(arr)).astype(np.uint8)
-                    # replace NaN with 0 so the array can be used numerically
-                    arrival = np.where(np.isnan(arr), 0, arr)
-                    stacked = np.stack([mask, arrival], axis=0)
-                    # parse metadata from filename (example: "trail_I0_WS12_WD312_M74.tif")
-                    base = os.path.splitext(os.path.basename(fname))[0]
-                    parts = base.split('_')
-                    # find the ignition number (starts with 'I')
-                    ign_str = next(p for p in parts if p.startswith('I'))
-                    ignition = int(ign_str[1:])
-                    ws_str = next(p for p in parts if p.startswith('WS'))
-                    windspeed = int(ws_str[2:])
-                    wd_str = next(p for p in parts if p.startswith('WD'))
-                    winddir = int(wd_str[2:])
-                    m_str = next(p for p in parts if p.startswith('M'))
-                    foliar_moisture = int(m_str[1:])
-                    trial = {
-                        "file_path": fpath,
-                        "fire": stacked,
-                        "ignition": ignition,
-                        "windspeed": windspeed,
-                        "winddir": winddir,
-                        "foliar_moisture": foliar_moisture,
-                    }
-                    self.trials.append(trial)
 
         # Load ignition points from IGNITIONS directory
         ignitions_dir = os.getenv("IGNITIONS")
