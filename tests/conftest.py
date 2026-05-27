@@ -1,6 +1,7 @@
 import pytest
-from wildfire_simulator.datasets import WildfireDataLoader
+from wildfire_simulator.dataloader import WildfireDataLoader, TrialFileLoader, TrialCollection
 
 @pytest.fixture(scope="session")
 def dataloader():
-    return WildfireDataLoader()
+    trials = TrialCollection(TrialFileLoader())
+    return WildfireDataLoader(trials)

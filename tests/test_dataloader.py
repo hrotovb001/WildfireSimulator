@@ -1,5 +1,7 @@
 import numpy as np
 
+from wildfire_simulator.dataloader import TrialFileLoader, TrialCollection
+
 def test_landscape_layers(dataloader):
     elevation = dataloader.elevation 
     assert isinstance(elevation, np.ndarray)
@@ -57,6 +59,7 @@ def test_landscape_layers(dataloader):
     assert not np.isnan(canopy_bulk_density).any()
     assert not (canopy_bulk_density == -9999).any()
 
+
 def test_ignitions(dataloader):
     # ignitions are a dict where key is the ignition number (int)
     # and the value is the ignition
@@ -80,7 +83,8 @@ def test_ignitions(dataloader):
     assert y >= 0 and y < elevation.shape[0]
     assert x >= 0 and x < elevation.shape[1]
 
-def test_trails(dataloader):
+
+def test_trials(dataloader):
     trials = dataloader.trials
     assert len(dataloader.trials) > 0
 
@@ -111,4 +115,19 @@ def test_trails(dataloader):
 
     # file path where trial comes from
     assert isinstance(trial["file_path"], str)
+
+
+def test_trial_collection_laziness():
+    class FakeTrialFileLoader:
+        def load(self, file_path):
+            return self.data
+
+    loader = FakeTrialFileLoader()
+    trials = TrialCollection(loader)
+
+    loader.data = "example data"
+    assert trials[0] == "example data"
+
+    loader.data = "some other example data"
+    assert trials[0] == "some other example data"
 
