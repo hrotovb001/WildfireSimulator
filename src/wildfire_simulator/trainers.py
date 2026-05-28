@@ -96,6 +96,33 @@ class ForwardBurnTrainer:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model.to(self.device)
 
+    @classmethod
+    def from_checkpoint(
+        cls,
+        checkpoint_path,
+        model,
+        optimizer,
+        loss_fn,
+        train_loader,
+        val_loader,
+        batch_processor,
+        callbacks=None,
+        epochs=1
+    ):
+        checkpoint = torch.load(checkpoint_path)
+        model.load_state_dict(checkpoint['model'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        return cls(
+            model=model,
+            optimizer=optimizer,
+            loss_fn=loss_fn,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            batch_processor=batch_processor,
+            callbacks=callbacks,
+            epochs=epochs
+        )
+
     def _train_epoch(self, epoch, total_epochs):
         self.model.train()
         total_loss = 0.0
@@ -142,21 +169,12 @@ class ForwardBurnTrainer:
 
     def fit(self):
         total_epochs = self.epochs
-        start_time = time.time()
         for epoch in range(total_epochs):
             train_loss = self._train_epoch(epoch, total_epochs)
             val_loss = self._validate(epoch, total_epochs)
             metrics = {'val_loss': val_loss}
             for cb in self.callbacks:
-                cb.on_validation_end(epoch=epoch, metrics=metrics, model=self.model)
-        duration = time.time() - start_time
-        summary = {
-            'best_epoch': total_epochs,
-            'train_loss': train_loss,
-            'val_loss': val_loss,
-            'duration_seconds': duration,
-        }
-        return summary
+                cb.on_validation_end(epoch=epoch, metrics=metrics, model=self.model, optimizer=self.optimizer)
 
     def evaluate(self):
         val_loss = self._validate(epoch=0, total_epochs=1)

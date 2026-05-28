@@ -18,7 +18,7 @@ class ModelCheckpoint:
         else:
             raise ValueError(f"Unsupported mode: {self.mode}")
 
-    def on_validation_end(self, epoch, metrics, model):
+    def on_validation_end(self, epoch, metrics, model, optimizer):
         current = metrics.get(self.monitor)
         if current is None:
             return
@@ -27,5 +27,9 @@ class ModelCheckpoint:
             fname = self.filename_template.format(epoch=epoch, val_loss=current) + ".pt"
             os.makedirs('./checkpoints', exist_ok=True)
             path = os.path.join('./checkpoints', fname)
-            torch.save(model.state_dict(), path)
+            checkpoint = {
+                'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+            }
+            torch.save(checkpoint, path)
             self.best_path = path
