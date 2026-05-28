@@ -73,35 +73,40 @@ def test_trainer(dataloader):
         num_workers=0
     )
 
-    model = MK_UNet_Regression(
-        in_channels=14,
-        out_channels=2,
-        channels=[16, 32, 64, 96, 160],
-        final_activation='relu'
-    )
+    def get_trainer():
+        model = MK_UNet_Regression(
+            in_channels=14,
+            out_channels=2,
+            channels=[16, 32, 64, 96, 160],
+            final_activation='relu'
+        )
 
-    checkpoint_cb = ModelCheckpoint(
-        monitor='val_loss',
-        mode='min',
-        filename='best-model-{epoch:02d}-{val_loss:.2f}'
-    )
+        checkpoint_cb = ModelCheckpoint(
+            monitor='val_loss',
+            mode='min',
+            filename='best-model-{epoch:02d}-{val_loss:.2f}'
+        )
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        5e-4,
-        weight_decay=1e-4
-    )
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            5e-4,
+            weight_decay=1e-4
+        )
 
-    trainer = ForwardBurnTrainer(
-        model=model,
-        optimizer=optimizer,
-        loss_fn=nn.L1Loss(),
-        train_loader=train_loader,
-        val_loader=val_loader,
-        batch_processor=batch_processor,
-        callbacks=[checkpoint_cb],
-        epochs=10
-    )
+        trainer = ForwardBurnTrainer(
+            model=model,
+            optimizer=optimizer,
+            loss_fn=nn.L1Loss(),
+            train_loader=train_loader,
+            val_loader=val_loader,
+            batch_processor=batch_processor,
+            callbacks=[checkpoint_cb],
+            epochs=10
+        )
+
+        return trainer
+
+    trainer = get_trainer()
 
     eval_before = trainer.evaluate()
     assert isinstance(eval_before['val_loss'], float)
@@ -123,29 +128,8 @@ def test_trainer(dataloader):
 
     last_checkpoint = max(matching_files, key=lambda p: p.name)
 
-    checkpoint_cb = ModelCheckpoint(
-        monitor='val_loss',
-        mode='min',
-        filename='best-model-{epoch:02d}-{val_loss:.2f}'
-    )
-
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        5e-4,
-        weight_decay=1e-4
-    )
-
-    trainer = ForwardBurnTrainer.from_checkpoint(
-        checkpoint_path=last_checkpoint,
-        model=model,
-        optimizer=optimizer,
-        loss_fn=nn.L1Loss(),
-        train_loader=train_loader,
-        val_loader=val_loader,
-        batch_processor=batch_processor,
-        callbacks=[checkpoint_cb],
-        epochs=10
-    )
+    trainer = get_trainer()
+    trainer.load_checkpoint(last_checkpoint)
 
     eval_before_resumed = trainer.evaluate()
     assert abs(eval_before_resumed['val_loss'] - eval_after['val_loss']) < 0.01
