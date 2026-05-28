@@ -80,7 +80,7 @@ def test_trainer(dataloader):
         final_activation='relu'
     )
 
-    checkpoint = ModelCheckpoint(
+    checkpoint_cb = ModelCheckpoint(
         monitor='val_loss',
         mode='min',
         filename='best-model-{epoch:02d}-{val_loss:.2f}'
@@ -99,8 +99,8 @@ def test_trainer(dataloader):
         train_loader=train_loader,
         val_loader=val_loader,
         batch_processor=batch_processor,
-        callbacks=[checkpoint],
-        epochs=3
+        callbacks=[checkpoint_cb],
+        epochs=10
     )
 
     eval_before = trainer.evaluate()
@@ -111,10 +111,46 @@ def test_trainer(dataloader):
     trainer.fit()
 
     eval_after = trainer.evaluate()
-    assert isinstance(eval_after['val_loss'], float)
     assert eval_after['val_loss'] < eval_before['val_loss']
 
     folder = Path('./checkpoints')
     pattern = re.compile(r"best-model-\d{2}-\d+\.\d{2}\.pt")
-    found = any(pattern.fullmatch(p.name) for p in folder.iterdir() if p.is_file())
-    assert found
+    matching_files = [
+        p for p in folder.iterdir() 
+        if p.is_file() and pattern.fullmatch(p.name)
+    ]
+    assert matching_files
+
+    last_checkpoint = max(matching_files, key=lambda p: p.name)
+
+    checkpoint_cb = ModelCheckpoint(
+        monitor='val_loss',
+        mode='min',
+        filename='best-model-{epoch:02d}-{val_loss:.2f}'
+    )
+
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        5e-4,
+        weight_decay=1e-4
+    )
+
+    trainer = ForwardBurnTrainer.from_checkpoint(
+        checkpoint_path=last_checkpoint,
+        model=model,
+        optimizer=optimizer,
+        loss_fn=nn.L1Loss(),
+        train_loader=train_loader,
+        val_loader=val_loader,
+        batch_processor=batch_processor,
+        callbacks=[checkpoint_cb],
+        epochs=10
+    )
+
+    eval_before_resumed = trainer.evaluate()
+    assert abs(eval_before_resumed['val_loss'] - eval_after['val_loss']) < 0.01
+
+    trainer.fit()
+
+    eval_after_resumed = trainer.evaluate()
+    assert eval_after_resumed['val_loss'] < eval_after['val_loss']
