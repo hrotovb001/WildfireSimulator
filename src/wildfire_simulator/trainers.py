@@ -96,32 +96,10 @@ class ForwardBurnTrainer:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model.to(self.device)
 
-    @classmethod
-    def from_checkpoint(
-        cls,
-        checkpoint_path,
-        model,
-        optimizer,
-        loss_fn,
-        train_loader,
-        val_loader,
-        batch_processor,
-        callbacks=None,
-        epochs=1
-    ):
+    def load_checkpoint(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
-        model.load_state_dict(checkpoint['model'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        return cls(
-            model=model,
-            optimizer=optimizer,
-            loss_fn=loss_fn,
-            train_loader=train_loader,
-            val_loader=val_loader,
-            batch_processor=batch_processor,
-            callbacks=callbacks,
-            epochs=epochs
-        )
+        self.model.load_state_dict(checkpoint['model'])
+        self.optimizer.load_state_dict(checkpoint['optimizer'])
 
     def _train_epoch(self, epoch, total_epochs):
         self.model.train()
