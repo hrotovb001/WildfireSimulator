@@ -1,11 +1,13 @@
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 import torch.nn as nn
 from pathlib import Path
+import os
 import shutil
 import re
 
-from wildfire_simulator.callbacks import ModelCheckpoint
+from wildfire_simulator.callbacks import ModelCheckpoint, TensorBoardCallback
 from wildfire_simulator.datasets import WildfireDataset
 from wildfire_simulator.forward_burn_process import ForwardBurnProcess
 from wildfire_simulator.models import MK_UNet_Regression
@@ -73,6 +75,16 @@ def test_trainer(dataloader):
         num_workers=0
     )
 
+    class SpySummaryWriter:
+        def __init__(self, run):
+            self.writer = SummaryWriter(run)
+            self.count = 0
+
+        def add_scalar(self, tag, value, epoch):
+            self.writer.add_scalar(tag, value, epoch)
+            if tag == "Loss":
+                self.count += 1
+
     def get_trainer(epochs):
         model = MK_UNet_Regression(
             in_channels=14,
@@ -85,6 +97,14 @@ def test_trainer(dataloader):
             monitor='val_loss',
             mode='min',
             filename='best-model-{epoch:02d}-{val_loss:.2f}'
+        )
+
+        train_writer = SpySummaryWriter("training/train")
+        val_writer = SpySummaryWriter("training/val")
+
+        tensorboard_cb = TensorBoardCallback(
+            train_writer=train_writer,
+            val_writer=val_writer
         )
 
         optimizer = torch.optim.AdamW(
@@ -100,13 +120,15 @@ def test_trainer(dataloader):
             train_loader=train_loader,
             val_loader=val_loader,
             batch_processor=batch_processor,
-            callbacks=[checkpoint_cb],
+            callbacks=[checkpoint_cb, tensorboard_cb],
             epochs=epochs
         )
 
-        return trainer
+        return trainer, train_writer, val_writer
 
-    trainer = get_trainer(epochs=10)
+    shutil.rmtree('./training', ignore_errors=True)
+
+    trainer, train_writer, val_writer = get_trainer(epochs=10)
 
     eval_before = trainer.evaluate()
     assert isinstance(eval_before['val_loss'], float)
@@ -114,6 +136,9 @@ def test_trainer(dataloader):
     shutil.rmtree('./checkpoints', ignore_errors=True)
 
     trainer.fit()
+
+    assert train_writer.count == 10
+    assert val_writer.count == 10
 
     eval_after = trainer.evaluate()
     assert eval_after['val_loss'] < eval_before['val_loss']
@@ -128,7 +153,7 @@ def test_trainer(dataloader):
 
     last_checkpoint = max(matching_files, key=lambda p: p.name)
 
-    trainer = get_trainer(epochs=20)
+    trainer, _, _ = get_trainer(epochs=20)
     trainer.load_checkpoint(last_checkpoint)
 
     eval_before_resumed = trainer.evaluate()
@@ -138,3 +163,4 @@ def test_trainer(dataloader):
 
     eval_after_resumed = trainer.evaluate()
     assert eval_after_resumed['val_loss'] < eval_after['val_loss']
+
