@@ -28,6 +28,7 @@ class ModelCheckpoint:
             os.makedirs('./checkpoints', exist_ok=True)
             path = os.path.join('./checkpoints', fname)
             checkpoint = {
+                'epoch': epoch,
                 'model': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
             }

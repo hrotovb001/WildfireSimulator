@@ -95,9 +95,11 @@ class ForwardBurnTrainer:
         self.epochs = epochs
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model.to(self.device)
+        self.current_epoch = 0
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
+        self.current_epoch = checkpoint['epoch'] + 1
         self.model.load_state_dict(checkpoint['model'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])
 
@@ -147,12 +149,13 @@ class ForwardBurnTrainer:
 
     def fit(self):
         total_epochs = self.epochs
-        for epoch in range(total_epochs):
+        for epoch in range(self.current_epoch, total_epochs):
             train_loss = self._train_epoch(epoch, total_epochs)
             val_loss = self._validate(epoch, total_epochs)
             metrics = {'val_loss': val_loss}
             for cb in self.callbacks:
                 cb.on_validation_end(epoch=epoch, metrics=metrics, model=self.model, optimizer=self.optimizer)
+            self.current_epoch += 1
 
     def evaluate(self):
         val_loss = self._validate(epoch=0, total_epochs=1)
