@@ -2,8 +2,6 @@ import torch
 import os
 
 class ModelCheckpoint:
-    """Simple model checkpoint callback. Saves the model when the monitored quantity improves."""
-
     def __init__(self, monitor='val_loss', mode='min', filename='best-model-{epoch:02d}-{val_loss:.2f}'):
         self.monitor = monitor
         self.mode = mode
@@ -34,3 +32,12 @@ class ModelCheckpoint:
             }
             torch.save(checkpoint, path)
             self.best_path = path
+
+class TensorBoardCallback:
+    def __init__(self, train_writer, val_writer):
+        self.train_writer = train_writer
+        self.val_writer = val_writer
+
+    def on_validation_end(self, epoch, metrics, model, optimizer):
+        self.train_writer.add_scalar("Loss", metrics['train_loss'], epoch)
+        self.val_writer.add_scalar("Loss", metrics['val_loss'], epoch)

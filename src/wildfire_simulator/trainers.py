@@ -152,7 +152,7 @@ class ForwardBurnTrainer:
         for epoch in range(self.current_epoch, total_epochs):
             train_loss = self._train_epoch(epoch, total_epochs)
             val_loss = self._validate(epoch, total_epochs)
-            metrics = {'val_loss': val_loss}
+            metrics = {'train_loss': train_loss, 'val_loss': val_loss}
             for cb in self.callbacks:
                 cb.on_validation_end(epoch=epoch, metrics=metrics, model=self.model, optimizer=self.optimizer)
             self.current_epoch += 1
