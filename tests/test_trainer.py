@@ -141,7 +141,7 @@ def test_trainer(dataloader):
 
     last_checkpoint = max(matching_files, key=lambda p: p.name)
 
-    trainer = get_trainer(epochs=20)
+    trainer = get_trainer(epochs=30)
     trainer.load_checkpoint(last_checkpoint)
 
     eval_before_resumed = trainer.evaluate()
@@ -154,9 +154,9 @@ def test_trainer(dataloader):
 
     train_acc = EventAccumulator("training_test/train")
     train_acc.Reload()
-    assert len(train_acc.Scalars("Loss")) == 20
+    assert len(train_acc.Scalars("Loss")) == 30
 
     val_acc = EventAccumulator("training_test/val")
     val_acc.Reload()
-    assert len(val_acc.Scalars("Loss")) == 20
+    assert len(val_acc.Scalars("Loss")) == 30
 
