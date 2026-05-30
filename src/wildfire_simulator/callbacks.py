@@ -2,12 +2,11 @@ import torch
 import os
 
 class ModelCheckpoint:
-    def __init__(self, monitor='val_loss', mode='min', filename='best-model-{epoch:02d}-{val_loss:.2f}'):
+    def __init__(self, monitor, mode, filepath):
         self.monitor = monitor
         self.mode = mode
-        self.filename_template = filename
+        self.filepath_template = filepath
         self.best_metric = None
-        self.best_path = None
 
         if self.mode == 'min':
             self.compare = lambda current, best: current < best
@@ -22,16 +21,14 @@ class ModelCheckpoint:
             return
         if self.best_metric is None or self.compare(current, self.best_metric):
             self.best_metric = current
-            fname = self.filename_template.format(epoch=epoch, val_loss=current) + ".pt"
-            os.makedirs('./checkpoints', exist_ok=True)
-            path = os.path.join('./checkpoints', fname)
+            path = self.filepath_template.format(epoch=epoch, val_loss=current)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
             checkpoint = {
                 'epoch': epoch,
                 'model': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
             }
             torch.save(checkpoint, path)
-            self.best_path = path
 
 class TensorBoardCallback:
     def __init__(self, train_writer, val_writer):

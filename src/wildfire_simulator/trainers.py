@@ -22,15 +22,17 @@ class BurnerBatchProcessor:
         self,
         burner,
         dt,
-        max_t
+        max_t,
+        eval
     ):
         self.burner = burner
         self.dt = dt
         self.max_t = max_t
         self.generator = torch.Generator()
+        self.eval = eval
 
-    def __call__(self, batch, epoch, batch_idx, eval):
-        if eval:
+    def __call__(self, batch, epoch, batch_idx):
+        if self.eval:
             epoch = 0
 
         self.generator.manual_seed(epoch * 10_000 + batch_idx)
@@ -81,7 +83,8 @@ class ForwardBurnTrainer:
         loss_fn,
         train_loader,
         val_loader,
-        batch_processor,
+        train_batch_processor,
+        val_batch_processor,
         callbacks=None,
         epochs=1
     ):
@@ -90,7 +93,8 @@ class ForwardBurnTrainer:
         self.loss_fn = loss_fn
         self.train_loader = train_loader
         self.val_loader = val_loader
-        self.batch_processor = batch_processor
+        self.train_batch_processor = train_batch_processor
+        self.val_batch_processor = val_batch_processor
         self.callbacks = callbacks or []
         self.epochs = epochs
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -110,7 +114,7 @@ class ForwardBurnTrainer:
 
         pbar = tqdm(self.train_loader, desc=f"Epoch {epoch}")
         for batch_idx, batch in enumerate(pbar):
-            inputs, targets = self.batch_processor(batch, epoch=epoch, batch_idx=batch_idx, eval=False)
+            inputs, targets = self.train_batch_processor(batch, epoch=epoch, batch_idx=batch_idx)
             inputs, targets = inputs.to(self.device), targets.to(self.device)
 
             N = inputs.size(0)
@@ -134,7 +138,7 @@ class ForwardBurnTrainer:
         pbar = tqdm(self.val_loader, desc="Validating")
         with torch.no_grad():
             for batch_idx, batch in enumerate(pbar):
-                inputs, targets = self.batch_processor(batch, epoch=epoch, batch_idx=batch_idx, eval=True)
+                inputs, targets = self.val_batch_processor(batch, epoch=epoch, batch_idx=batch_idx)
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
 
                 N = inputs.size(0)
