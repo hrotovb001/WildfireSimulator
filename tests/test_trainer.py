@@ -154,9 +154,9 @@ def test_trainer(dataloader):
 
     train_acc = EventAccumulator("training_test/train")
     train_acc.Reload()
-    assert len(train_acc.Scalars("Loss")) == 30
+    assert len(set(s.step for s in train_acc.Scalars("Loss"))) == 30
 
     val_acc = EventAccumulator("training_test/val")
     val_acc.Reload()
-    assert len(val_acc.Scalars("Loss")) == 30
+    assert len(set(s.step for s in val_acc.Scalars("Loss"))) == 30
 

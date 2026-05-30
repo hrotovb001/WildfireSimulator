@@ -49,7 +49,7 @@ class TrialFileLoader:
 
 
 class TrialCollection:
-    """fetch all the trial file paths and then fetch the data as needed using the file loader"""
+    """Fetch all the trial file paths and then fetch the data as needed using the file loader"""
 
     def __init__(self, loader):
         # Load environment from .env file
@@ -74,7 +74,7 @@ class TrialCollection:
 
 
 class WildfireDataLoader:
-    """Loads landscape and trial GeoTIFFs (path from LANDSCAPE and TRIALS env variable) as well as ignition shape files (from IGNITIONS)"""
+    """Loads landscape and trial GeoTIFFs as well as ignition shape files"""
 
     def __init__(self, trials):
         # Load environment from .env file
