@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 import torch.nn as nn
 from pathlib import Path
 import os
@@ -75,16 +76,6 @@ def test_trainer(dataloader):
         num_workers=0
     )
 
-    class SpySummaryWriter:
-        def __init__(self, run):
-            self.writer = SummaryWriter(run)
-            self.count = 0
-
-        def add_scalar(self, tag, value, epoch):
-            self.writer.add_scalar(tag, value, epoch)
-            if tag == "Loss":
-                self.count += 1
-
     def get_trainer(epochs):
         model = MK_UNet_Regression(
             in_channels=14,
@@ -99,8 +90,8 @@ def test_trainer(dataloader):
             filename='best-model-{epoch:02d}-{val_loss:.2f}'
         )
 
-        train_writer = SpySummaryWriter("training/train")
-        val_writer = SpySummaryWriter("training/val")
+        train_writer = SummaryWriter("training_test/train")
+        val_writer = SummaryWriter("training_test/val")
 
         tensorboard_cb = TensorBoardCallback(
             train_writer=train_writer,
@@ -124,11 +115,11 @@ def test_trainer(dataloader):
             epochs=epochs
         )
 
-        return trainer, train_writer, val_writer
+        return trainer
 
-    shutil.rmtree('./training', ignore_errors=True)
+    shutil.rmtree('./training_test', ignore_errors=True)
 
-    trainer, train_writer, val_writer = get_trainer(epochs=10)
+    trainer = get_trainer(epochs=10)
 
     eval_before = trainer.evaluate()
     assert isinstance(eval_before['val_loss'], float)
@@ -136,9 +127,6 @@ def test_trainer(dataloader):
     shutil.rmtree('./checkpoints', ignore_errors=True)
 
     trainer.fit()
-
-    assert train_writer.count == 10
-    assert val_writer.count == 10
 
     eval_after = trainer.evaluate()
     assert eval_after['val_loss'] < eval_before['val_loss']
@@ -153,7 +141,7 @@ def test_trainer(dataloader):
 
     last_checkpoint = max(matching_files, key=lambda p: p.name)
 
-    trainer, _, _ = get_trainer(epochs=20)
+    trainer = get_trainer(epochs=20)
     trainer.load_checkpoint(last_checkpoint)
 
     eval_before_resumed = trainer.evaluate()
@@ -163,4 +151,12 @@ def test_trainer(dataloader):
 
     eval_after_resumed = trainer.evaluate()
     assert eval_after_resumed['val_loss'] < eval_after['val_loss']
+
+    train_acc = EventAccumulator("training_test/train")
+    train_acc.Reload()
+    assert len(train_acc.Scalars("Loss")) == 20
+
+    val_acc = EventAccumulator("training_test/val")
+    val_acc.Reload()
+    assert len(val_acc.Scalars("Loss")) == 20
 
