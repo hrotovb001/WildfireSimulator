@@ -1,6 +1,6 @@
 import numpy as np
 
-from wildfire_simulator.dataloader import TrialFileLoader, TrialCollection
+from wildfire_simulator.dataloader import TrialCollection
 
 def test_landscape_layers(dataloader):
     elevation = dataloader.elevation 
