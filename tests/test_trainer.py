@@ -64,17 +64,10 @@ def test_trainer(dataloader):
     # share same batch_processor for train and test to allow model to overfit
     batch_processor = BurnerBatchProcessor(burner=burner, dt=30, max_t=1440, eval=True)
 
-    # disable shuffle for same reason as above
-    train_loader = DataLoader(
+    # share loader for the same reason as above
+    loader = DataLoader(
         dataset=dataset,
         batch_size=1,
-        shuffle=False,
-        num_workers=0
-    )
-
-    val_loader = DataLoader(
-        dataset=dataset,
-        batch_size=64,
         shuffle=False,
         drop_last=False,
         num_workers=0
@@ -112,8 +105,8 @@ def test_trainer(dataloader):
             model=model,
             optimizer=optimizer,
             loss_fn=nn.L1Loss(),
-            train_loader=train_loader,
-            val_loader=val_loader,
+            train_loader=loader,
+            val_loader=loader,
             train_batch_processor = batch_processor,
             val_batch_processor = batch_processor,
             callbacks=[checkpoint_cb, tensorboard_cb],
