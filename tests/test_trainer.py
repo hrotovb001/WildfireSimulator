@@ -57,6 +57,8 @@ def test_batch_processor(dataloader):
 
 
 def test_trainer(dataloader):
+    torch.manual_seed(42)
+
     dataset = WildfireDataset(dataloader)
 
     burner = ForwardBurnProcess()
