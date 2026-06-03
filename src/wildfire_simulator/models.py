@@ -14,7 +14,6 @@ import torch.nn.functional as F
 from functools import partial
 import math
 
-import timm
 from timm.layers import trunc_normal_tf_
 from timm.models import named_apply
 
@@ -70,6 +69,8 @@ def act_layer(act, inplace=False, neg_slope=0.2, n_prelu=1):
         layer = nn.GELU()
     elif act == 'hswish':
         layer = nn.Hardswish(inplace)
+    elif act == 'sigmoid':
+        layer = nn.Sigmoid()
     else:
         raise NotImplementedError('activation layer [%s] is not found' % act)
     return layer

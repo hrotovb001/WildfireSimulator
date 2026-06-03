@@ -68,3 +68,16 @@ class WildfireDataset(Dataset):
     def __getitem__(self, idx):
         channels = self._load_raw_channels(idx)
         return torch.from_numpy(channels).to(torch.float32)
+
+
+class TransformedDataset:
+    def __init__(self, dataset, transform):
+        self.dataset = dataset
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.dataset)
+    
+    def __getitem__(self, idx):
+        return self.transform(self.dataset[idx])
+
