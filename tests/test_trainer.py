@@ -9,7 +9,8 @@ import shutil
 import re
 
 from wildfire_simulator.callbacks import ModelCheckpoint, TensorBoardCallback
-from wildfire_simulator.datasets import WildfireDataset
+from wildfire_simulator.datasets import WildfireDataset, TransformedDataset
+from wildfire_simulator.transforms import MinMaxPerChannel
 from wildfire_simulator.forward_burn_process import ForwardBurnProcess
 from wildfire_simulator.models import MK_UNet_Regression
 from wildfire_simulator.trainers import ForwardBurnTrainer, BurnerBatchProcessor
@@ -60,11 +61,13 @@ def test_trainer(dataloader):
     torch.manual_seed(42)
 
     dataset = WildfireDataset(dataloader)
+    transform = MinMaxPerChannel(dataset.min_val, dataset.max_val)
+    dataset = TransformedDataset(dataset, transform)
 
     burner = ForwardBurnProcess()
 
     # share same batch_processor for train and test to allow model to overfit
-    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, max_t=1440, eval=True)
+    batch_processor = BurnerBatchProcessor(burner=burner, dt=1/48, max_t=1, eval=True)
 
     # share loader for the same reason as above
     loader = DataLoader(
@@ -80,7 +83,7 @@ def test_trainer(dataloader):
             in_channels=14,
             out_channels=2,
             channels=[16, 32, 64, 96, 160],
-            final_activation='relu'
+            final_activation='sigmoid'
         )
 
         checkpoint_cb = ModelCheckpoint(
@@ -106,7 +109,7 @@ def test_trainer(dataloader):
         trainer = ForwardBurnTrainer(
             model=model,
             optimizer=optimizer,
-            loss_fn=nn.L1Loss(),
+            loss_fn=nn.BCELoss(),
             train_loader=loader,
             val_loader=loader,
             train_batch_processor = batch_processor,

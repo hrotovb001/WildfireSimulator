@@ -86,11 +86,11 @@ def test_ignitions(dataloader):
 
 def test_trials(dataloader):
     trials = dataloader.trials
-    assert len(dataloader.trials) > 0
+    assert len(trials) > 0
 
     # each trial has fire, ignition number, windspeed,
     # winddir, foliar_moisture
-    trial = dataloader.trials[0]
+    trial = trials[0]
     assert isinstance(trial, dict)
 
     # each fire has a mask and a fire arrival time channel
@@ -104,8 +104,8 @@ def test_trials(dataloader):
 
     # the arrival time indicates the time at which the fire reached a pixel (default to value of 0 for masked pixels)
     arrival = fire[1]
-    assert not np.isnan(fire).any()
-    assert not (fire == -9999).any()
+    assert not np.isnan(arrival).any()
+    assert not (arrival == -9999).any()
 
     # all other properties are int
     assert isinstance(trial["ignition"], int)

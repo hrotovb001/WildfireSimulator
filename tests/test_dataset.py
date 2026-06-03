@@ -2,7 +2,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from wildfire_simulator.datasets import WildfireDataset
+from wildfire_simulator.datasets import WildfireDataset, TransformedDataset
+from wildfire_simulator.transforms import MinMaxPerChannel
 
 def test_dataset(dataloader):
     dataset = WildfireDataset(dataloader)
@@ -35,4 +36,17 @@ def test_min_max_norm(dataloader):
     assert not (max_val == -9999).any()
 
     assert (min_val < max_val).all()
+
+def test_transformed_dataset(dataloader):
+    dataset = WildfireDataset(dataloader)
+    transform = MinMaxPerChannel(dataset.min_val, dataset.max_val)
+    transformed_dataset = TransformedDataset(dataset, transform)
+
+    for sample in transformed_dataset:
+        min_val = sample.min().item()
+        max_val = sample.max().item()
+        assert min_val >= 0
+        assert max_val <= 1
+        assert min_val < max_val
+
 
