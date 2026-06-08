@@ -40,3 +40,4 @@ def save_frame(data, filepath):
 
     fig.savefig(filepath, bbox_inches='tight', pad_inches=0.1)
     plt.close(fig)
+
