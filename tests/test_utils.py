@@ -28,7 +28,7 @@ def test_save_comparison():
 
     shutil.rmtree('./tmp', ignore_errors=True)
 
-    save_comparison(data_pred, data_true, './tmp/random_comparison.png')
+    save_comparison(preds, trues, './tmp/random_comparison.png')
 
     file_path = Path('./tmp/random_comparison.png')
     assert file_path.is_file()

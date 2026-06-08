@@ -41,3 +41,39 @@ def save_frame(data, filepath):
     fig.savefig(filepath, bbox_inches='tight', pad_inches=0.1)
     plt.close(fig)
 
+
+def save_comparison(data_pred, data_true, filepath):
+    """
+    Save a side-by-side comparison of predicted and true frames.
+
+    Parameters
+    ----------
+    data_pred : np.ndarray
+        Array of shape (C, H, W) for prediction.
+    data_true : np.ndarray
+        Array of shape (C, H, W) for ground truth.
+    filepath : str or Path
+        Path where the image will be saved.
+    """
+    n_channels = data_pred.shape[0]
+
+    # Two rows (predictions and true) and n_channels columns
+    fig, axes = plt.subplots(
+        2, n_channels, figsize=(n_channels * 2, 4), squeeze=False
+    )
+
+    for i in range(n_channels):
+        ax_pred = axes[0, i]
+        ax_pred.imshow(data_pred[i], cmap='gray', aspect='auto')
+        ax_pred.axis('off')
+
+        ax_true = axes[1, i]
+        ax_true.imshow(data_true[i], cmap='gray', aspect='auto')
+        ax_true.axis('off')
+
+    # Ensure the output directory exists
+    Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+
+    fig.savefig(filepath, bbox_inches='tight', pad_inches=0.1)
+    plt.close(fig)
+
