@@ -44,3 +44,9 @@ def test_transforms():
             [0.7812, 0.6250, 0.5312]
         ]
     ], dtype=torch.float32)
+
+    print(normalized)
+    print(expected)
+
+    assert torch.allclose(normalized, expected, atol=5e-5)
+    assert torch.allclose(transform.inverse(normalized), x, atol=5e-5)
