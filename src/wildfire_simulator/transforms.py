@@ -6,16 +6,27 @@ class MinMaxPerChannel:
         self.max_vals = torch.as_tensor(max_vals, dtype=torch.float32)
 
     def __call__(self, img):
-        C = img.shape[-3]
+        return self.transform(img)
 
+    def _get_params(self, img):
+        C = img.shape[-3]
         if img.dim() == 3:
             min_vals = self.min_vals.view(C, 1, 1)
             max_vals = self.max_vals.view(C, 1, 1)
-        elif img.dim() == 4:
+        else:
             min_vals = self.min_vals.view(1, C, 1, 1)
             max_vals = self.max_vals.view(1, C, 1, 1)
-        
+
         range_vals = max_vals - min_vals
         range_vals = torch.clamp(range_vals, min=1e-8)
+        return min_vals, range_vals
 
+    def transform(self, img):
+        min_vals, range_vals = self._get_params(img)
         return (img - min_vals) / range_vals
+    
+    def inverse(self, img):
+        min_vals, range_vals = self._get_params(img)
+        return img * range_vals + min_vals
+
+
