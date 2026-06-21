@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 import shutil
 import re
+import numpy as np
 
 from wildfire_simulator.callbacks import ModelCheckpoint, TensorBoardCallback
 from wildfire_simulator.datasets import WildfireDataset, TransformedDataset
@@ -14,19 +15,22 @@ from wildfire_simulator.transforms import MinMaxPerChannel
 from wildfire_simulator.forward_burn_process import ForwardBurnProcess
 from wildfire_simulator.models import MK_UNet_Regression
 from wildfire_simulator.trainers import ForwardBurnTrainer, BurnerBatchProcessor
+from wildfire_simulator.scheduled_sampler import ScheduledSampler
 
 def test_batch_processor(dataloader):
     dataset = WildfireDataset(dataloader)
 
     burner = ForwardBurnProcess()
 
-    # random t with min(max(arrival_time), max_t - dt)  
+    sampler = ScheduledSampler(k=0.1, t0=40)
+
     # input_tensor uses burner at t
     # output_tensor uses burner at t + dt
     # each item of batch uses a different t
-    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, max_t=1440, eval=False)
-    batch = torch.stack([dataset[0], dataset[1]])
-    input_tensor, output_tensor = batch_processor(batch, epoch=0, batch_idx=0)
+    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, eval=False, sampler=sampler)
+    pred = torch.stack([dataset[1], dataset[0]])
+    true = torch.stack([dataset[0], dataset[1]])
+    input_tensor, output_tensor = batch_processor(pred, true, epoch=1, batch_idx=0, t=30)
 
     # the 14th channel is t broadcasted to all 512 x 512
     # the data is 500, 500 in last two dims but it must be
@@ -34,28 +38,70 @@ def test_batch_processor(dataloader):
     assert input_tensor.shape == (2, 14, 512, 512)
     assert output_tensor.shape == (2, 2, 512, 512)
 
-    input_tensor2, output_tensor2 = batch_processor(batch, epoch=0, batch_idx=0)
+    input_tensor2, output_tensor2 = batch_processor(pred, true, epoch=1, batch_idx=0, t=30)
     assert torch.equal(input_tensor, input_tensor2)
     assert torch.equal(output_tensor, output_tensor2)
     
-    input_tensor3, output_tensor3 = batch_processor(batch, epoch=0, batch_idx=1)
+    input_tensor3, output_tensor3 = batch_processor(pred, true, epoch=1, batch_idx=0, t=60)
     assert not torch.equal(input_tensor, input_tensor3)
     assert not torch.equal(output_tensor, output_tensor3)
 
-    input_tensor4, output_tensor4 = batch_processor(batch, epoch=1, batch_idx=0)
-    assert not torch.equal(input_tensor, input_tensor4)
-    assert not torch.equal(output_tensor, output_tensor4)
+    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, eval=True, sampler=sampler)
 
-    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, max_t=1440, eval=True)
+    input_tensor5, output_tensor5 = batch_processor(pred, true, epoch=1, batch_idx=0, t=30)
+    assert not torch.equal(input_tensor, input_tensor5)
 
-    input_tensor5, output_tensor5 = batch_processor(batch, epoch=1, batch_idx=0)
-    assert torch.equal(input_tensor, input_tensor5)
-    assert torch.equal(output_tensor, output_tensor5)
+def test_batch_processor_probabilistic(dataloader):
+    dataset = WildfireDataset(dataloader)
+    burner = ForwardBurnProcess()
 
-    input_tensor6, output_tensor6 = batch_processor(batch, epoch=1, batch_idx=1)
-    assert not torch.equal(input_tensor, input_tensor6)
-    assert not torch.equal(output_tensor, output_tensor6)
+    class TrueSampler():
+        def get_prob(self, epoch):
+            return 0.1
+    trueSampler = TrueSampler()
 
+    class PredSampler():
+        def get_prob(self, epoch):
+            return 0.9
+    predSampler = PredSampler()
+
+    pred = torch.stack([dataset[1], dataset[0]])
+    true = torch.stack([dataset[0], dataset[1]])
+    h, w = true.shape[-2], true.shape[-1]
+    pad_h = (32 - h % 32) % 32
+    pad_w = (32 - w % 32) % 32
+    true = torch.nn.functional.pad(true, (0, pad_w, 0, pad_h))
+    pred = torch.nn.functional.pad(pred, (0, pad_w, 0, pad_h))
+    
+    count = 0
+    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, eval=False, sampler=trueSampler)
+    for i in range(100):
+        input_tensor, _ = batch_processor(pred, true, epoch=i, batch_idx=0, t=30)
+        input_tensor = burner(input_tensor, 30)
+        time_tensor = torch.full((pred.shape[0], 1, 512, 512), 30)
+        if torch.equal(torch.cat([true, time_tensor], dim=1), input_tensor):
+            count += 1
+    assert count < 20
+
+    count = 0
+    printed_debug = False
+    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, eval=False, sampler=predSampler)
+    for i in range(100):
+        input_tensor, _ = batch_processor(pred, true, epoch=i, batch_idx=0, t=30)
+        input_tensot = burner(input_tensor, 30)
+        time_tensor = torch.full((pred.shape[0], 1, 512, 512), 30)
+        combined = torch.cat([pred, time_tensor], dim=1)
+        if torch.equal(combined, input_tensor):
+            count += 1
+        elif not printed_debug:
+            diff = (combined - input_tensor).abs()
+            for ch in range(diff.shape[1]):
+                ch_diff = diff[:, ch]
+                print(f"  channel {ch}: max={ch_diff.max().item():.6f}, mean={ch_diff.mean().item():.6f}, nonzero={ch_diff.count_nonzero().item()}")
+        printed_debug = True
+
+    print(count)
+    assert count > 80
 
 def test_trainer(dataloader):
     torch.manual_seed(42)
@@ -67,7 +113,7 @@ def test_trainer(dataloader):
     burner = ForwardBurnProcess()
 
     # share same batch_processor for train and test to allow model to overfit
-    batch_processor = BurnerBatchProcessor(burner=burner, dt=1/48, max_t=1, eval=True)
+    batch_processor = BurnerBatchProcessor(burner=burner, dt=1/48, eval=True, sampler=ScheduledSampler(k=0.1, t0=40))
 
     # share loader for the same reason as above
     loader = DataLoader(
@@ -115,7 +161,8 @@ def test_trainer(dataloader):
             train_batch_processor = batch_processor,
             val_batch_processor = batch_processor,
             callbacks=[checkpoint_cb, tensorboard_cb],
-            epochs=epochs
+            epochs=epochs,
+            max_t=5/48
         )
 
         return trainer
