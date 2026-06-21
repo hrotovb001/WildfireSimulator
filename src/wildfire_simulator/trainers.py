@@ -141,7 +141,6 @@ class ForwardBurnTrainer:
         self.model.eval()
         total_loss = 0.0
         n_samples = len(self.val_loader.dataset)
-        preds_padded = None
 
         pbar = tqdm(self.val_loader, desc="Validating")
         with torch.no_grad():
