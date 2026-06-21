@@ -3,6 +3,10 @@ import torch.nn.functional as F
 
 from tqdm import tqdm
 
+from wildfire_simulator.scheduled_sampler import ScheduledSampler
+
+import numpy as np
+
 def _pad_to_multiple(tensor, multiple=32):
     """Pad the last two spatial dimensions to the next multiple of `multiple`."""
     _, _, h, w = tensor.shape
@@ -20,20 +24,23 @@ class BurnerBatchProcessor:
         self,
         burner,
         dt,
-        max_t,
-        eval
+        eval,
+        sampler
     ):
         self.burner = burner
         self.dt = dt
-        self.max_t = max_t
         self.generator = torch.Generator()
         self.eval = eval
+        self.sampler = sampler
 
-    def __call__(self, batch, epoch, batch_idx):
+    def __call__(self, pred, true, epoch, batch_idx, t):
         if self.eval:
             epoch = 0
 
         self.generator.manual_seed(epoch * 10_000 + batch_idx)
+
+        use_pred = torch.rand(1, generator=self.generator, device='cpu').item() < self.sampler.get_prob(epoch) or self.eval
+        batch = pred if use_pred else true
 
         N = batch.size(0)
         input_frames = []
@@ -43,19 +50,12 @@ class BurnerBatchProcessor:
             frame = batch[i]                     # (13, H, W)
             arrival = frame[1]                   # arrival times
             max_arr = arrival.max().item()
-            upper = min(max_arr, self.max_t - self.dt)
 
-            if upper <= 0:
-                t = 0.0
-            else:
-                r = torch.rand(1, generator=self.generator, device='cpu').item()
-                t = upper * r
-
-            in_frame = self.burner(frame, t)
+            in_frame = frame if use_pred else self.burner(frame, t)
             out_frame = self.burner(frame, t + self.dt)
 
             # Build the 14-channel input: add t as a constant channel
-            t_channel = torch.full((1, in_frame.shape[-2], in_frame.shape[-1]), t)
+            t_channel = torch.full((1, in_frame.shape[-2], in_frame.shape[-1]), t, device=in_frame.device)
             in_with_t = torch.cat([in_frame, t_channel], dim=0)   # (14, H, W)
             target = torch.stack([out_frame[0], out_frame[1]], dim=0)   # (2, H, W)
 
@@ -84,7 +84,8 @@ class ForwardBurnTrainer:
         train_batch_processor,
         val_batch_processor,
         callbacks=None,
-        epochs=1
+        epochs=1,
+        max_t=1,
     ):
         self.model = model
         self.optimizer = optimizer
@@ -98,6 +99,7 @@ class ForwardBurnTrainer:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model.to(self.device)
         self.current_epoch = 0
+        self.max_t = max_t
 
     def load_checkpoint(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
@@ -109,22 +111,29 @@ class ForwardBurnTrainer:
         self.model.train()
         total_loss = 0.0
         n_samples = len(self.train_loader.dataset)
+        preds_padded = torch.zeros(2, 13, 512, 512)
 
         pbar = tqdm(self.train_loader, desc=f"Epoch {epoch}")
         for batch_idx, batch in enumerate(pbar):
-            inputs, targets = self.train_batch_processor(batch, epoch=epoch, batch_idx=batch_idx)
-            inputs, targets = inputs.to(self.device), targets.to(self.device)
+            for t in np.arange(0, self.max_t, self.train_batch_processor.dt):
+                inputs, targets = self.train_batch_processor(preds_padded, batch, epoch=epoch, batch_idx=batch_idx, t=t)
+                inputs, targets = inputs.to(self.device), targets.to(self.device)
 
-            N = inputs.size(0)
+                N = inputs.size(0)
 
-            self.optimizer.zero_grad()
-            preds_padded = self.model(inputs)[0]
-            loss = self.loss_fn(preds_padded, targets)
-            loss.backward()
-            self.optimizer.step()
+                self.optimizer.zero_grad()
+                pred_out = self.model(inputs)
+                if isinstance(pred_out, (list, tuple)):
+                    pred_out = pred_out[0]
+                loss = self.loss_fn(pred_out, targets)
+                loss.backward()
+                self.optimizer.step()
 
-            total_loss += loss.item() * N
-            pbar.set_postfix(loss=f"{loss.item():.4f}")
+                preds_padded = inputs[:, :13, :, :].detach().cpu().clone()
+                preds_padded[:, :2, :, :] = pred_out.detach().cpu()
+
+                total_loss += loss.item() * N
+                pbar.set_postfix(loss=f"{loss.item():.4f}")
 
         return total_loss / n_samples
 
@@ -132,19 +141,39 @@ class ForwardBurnTrainer:
         self.model.eval()
         total_loss = 0.0
         n_samples = len(self.val_loader.dataset)
+        preds_padded = None
 
         pbar = tqdm(self.val_loader, desc="Validating")
         with torch.no_grad():
             for batch_idx, batch in enumerate(pbar):
-                inputs, targets = self.val_batch_processor(batch, epoch=epoch, batch_idx=batch_idx)
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
+                preds_padded = None
 
-                N = inputs.size(0)
+                for t in np.arange(0, self.max_t, self.val_batch_processor.dt):
+                    if preds_padded is None:
+                        pred_input = batch
+                    else:
+                        pred_input = preds_padded
 
-                preds_padded = self.model(inputs)[0]
-                loss = self.loss_fn(preds_padded, targets)
+                    inputs, targets = self.val_batch_processor(
+                        pred_input,
+                        batch,
+                        epoch=epoch,
+                        batch_idx=batch_idx,
+                        t=t,
+                    )
+
+                    inputs, targets = inputs.to(self.device), targets.to(self.device)
+                    N = inputs.size(0)
+
+                    pred_out = self.model(inputs)
+                    if isinstance(pred_out, (list, tuple)):
+                        pred_out = pred_out[0]
+
+                    preds_padded = inputs[:, :13, :, :].detach().cpu().clone()
+                    preds_padded[:, :2, :, :] = pred_out.detach().cpu()
+
+                loss = self.loss_fn(pred_out, targets)
                 total_loss += loss.item() * N
-
                 pbar.set_postfix(val_loss=f"{loss.item():.4f}")
 
         return total_loss / n_samples

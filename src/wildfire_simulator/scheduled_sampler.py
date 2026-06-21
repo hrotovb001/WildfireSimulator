@@ -5,5 +5,5 @@ class ScheduledSampler:
         self.k = k
         self.t0 = t0
 
-    def get_prob(self, t):
-        return 1 / (1 + math.exp(-self.k * (t - self.t0)))
+    def get_prob(self, epoch):
+        return 1 / (1 + math.exp(-self.k * (epoch - self.t0)))
