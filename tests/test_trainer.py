@@ -67,40 +67,48 @@ def test_batch_processor_probabilistic(dataloader):
 
     pred = torch.stack([dataset[1], dataset[0]])
     true = torch.stack([dataset[0], dataset[1]])
+    
     h, w = true.shape[-2], true.shape[-1]
     pad_h = (32 - h % 32) % 32
     pad_w = (32 - w % 32) % 32
+    
     true = torch.nn.functional.pad(true, (0, pad_w, 0, pad_h))
     pred = torch.nn.functional.pad(pred, (0, pad_w, 0, pad_h))
     
+    true_burned = torch.stack([burner(true[i], 30) for i in range(true.size(0))])
+    
     count = 0
-    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, eval=False, sampler=trueSampler)
+    batch_processor = BurnerBatchProcessor(
+        burner=burner,
+        dt=30,
+        eval=False,
+        sampler=trueSampler,
+    )
+    
     for i in range(100):
         input_tensor, _ = batch_processor(pred, true, epoch=i, batch_idx=0, t=30)
-        input_tensor = burner(input_tensor, 30)
         time_tensor = torch.full((pred.shape[0], 1, 512, 512), 30)
-        if torch.equal(torch.cat([true, time_tensor], dim=1), input_tensor):
+    
+        if torch.equal(torch.cat([true_burned, time_tensor], dim=1), input_tensor):
             count += 1
-    assert count < 20
-
+    
+    assert count > 80
+    
     count = 0
-    printed_debug = False
-    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, eval=False, sampler=predSampler)
+    batch_processor = BurnerBatchProcessor(
+        burner=burner,
+        dt=30,
+        eval=False,
+        sampler=predSampler,
+    )
+    
     for i in range(100):
         input_tensor, _ = batch_processor(pred, true, epoch=i, batch_idx=0, t=30)
-        input_tensot = burner(input_tensor, 30)
         time_tensor = torch.full((pred.shape[0], 1, 512, 512), 30)
-        combined = torch.cat([pred, time_tensor], dim=1)
-        if torch.equal(combined, input_tensor):
+    
+        if torch.equal(torch.cat([pred, time_tensor], dim=1), input_tensor):
             count += 1
-        elif not printed_debug:
-            diff = (combined - input_tensor).abs()
-            for ch in range(diff.shape[1]):
-                ch_diff = diff[:, ch]
-                print(f"  channel {ch}: max={ch_diff.max().item():.6f}, mean={ch_diff.mean().item():.6f}, nonzero={ch_diff.count_nonzero().item()}")
-        printed_debug = True
-
-    print(count)
+    
     assert count > 80
 
 def test_trainer(dataloader):
@@ -209,4 +217,5 @@ def test_trainer(dataloader):
     val_acc = EventAccumulator("training_test/val")
     val_acc.Reload()
     assert len(set(s.step for s in val_acc.Scalars("Loss"))) == 20
+
 
