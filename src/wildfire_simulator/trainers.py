@@ -132,7 +132,7 @@ class ForwardBurnTrainer:
                 preds_padded = inputs[:, :13, :, :].detach().cpu().clone()
                 preds_padded[:, :2, :, :] = pred_out.detach().cpu()
 
-                total_loss += loss.item() * N
+                total_loss += loss.item() * N * self.train_batch_processor.dt / self.max_t
                 pbar.set_postfix(loss=f"{loss.item():.4f}")
 
         return total_loss / n_samples

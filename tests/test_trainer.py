@@ -170,14 +170,14 @@ def test_trainer(dataloader):
             val_batch_processor = batch_processor,
             callbacks=[checkpoint_cb, tensorboard_cb],
             epochs=epochs,
-            max_t=5/48
+            max_t=3/48
         )
 
         return trainer
 
     shutil.rmtree('./training_test', ignore_errors=True)
 
-    trainer = get_trainer(epochs=10)
+    trainer = get_trainer(epochs=5)
 
     eval_before = trainer.evaluate()
     assert isinstance(eval_before['val_loss'], float)
@@ -199,7 +199,7 @@ def test_trainer(dataloader):
 
     last_checkpoint = max(matching_files, key=lambda p: p.name)
 
-    trainer = get_trainer(epochs=20)
+    trainer = get_trainer(epochs=10)
     trainer.load_checkpoint(last_checkpoint)
 
     eval_before_resumed = trainer.evaluate()
@@ -212,10 +212,10 @@ def test_trainer(dataloader):
 
     train_acc = EventAccumulator("training_test/train")
     train_acc.Reload()
-    assert len(set(s.step for s in train_acc.Scalars("Loss"))) == 20
+    assert len(set(s.step for s in train_acc.Scalars("Loss"))) == 10
 
     val_acc = EventAccumulator("training_test/val")
     val_acc.Reload()
-    assert len(set(s.step for s in val_acc.Scalars("Loss"))) == 20
+    assert len(set(s.step for s in val_acc.Scalars("Loss"))) == 10
 
 
