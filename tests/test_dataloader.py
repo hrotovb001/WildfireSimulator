@@ -43,7 +43,7 @@ def test_ignitions(dataloader):
     assert ignitions == ignitions_expected
 
 def test_trials(dataloader):
-    trials = dataloader.trials
+    trials = list(dataloader.trials)
     with open("tests/baseline/trials.pkl", "rb") as file:
         trials_expected = pickle.load(file)
 

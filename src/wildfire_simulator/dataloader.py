@@ -39,7 +39,7 @@ class TrialFileLoader:
         foliar_moisture = int(m_str[1:])
 
         return {
-            "file_path": file_path,
+            "filename": os.path.basename(file_path),
             "fire": stacked,
             "ignition": ignition,
             "windspeed": windspeed,
