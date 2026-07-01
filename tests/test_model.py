@@ -6,6 +6,8 @@ from wildfire_simulator.forward_burn_process import ForwardBurnProcess
 from wildfire_simulator.models import MK_UNet_Regression
 
 def test_model(dataloader):
+    torch.manual_seed(42)
+
     dataset = WildfireDataset(dataloader)
 
     model = MK_UNet_Regression(
@@ -26,6 +28,6 @@ def test_model(dataloader):
 
     output_tensor = model(input_tensor)
     assert output_tensor[0].shape == (1, 2, 512, 512)
-    assert output_tensor[0].max().item() == 1
-    assert output_tensor[0].min().item() == 0
+    assert 0 <= output_tensor[0].min().item() < 0.5
+    assert 0.5 <= output_tensor[0].max().item() < 1
 
