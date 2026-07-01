@@ -25,11 +25,12 @@ class BurnerBatchProcessor:
         burner,
         dt,
         eval,
-        sampler
+        sampler,
+        rng
     ):
         self.burner = burner
         self.dt = dt
-        self.generator = torch.Generator()
+        self.rng = rng
         self.eval = eval
         self.sampler = sampler
 
@@ -37,22 +38,17 @@ class BurnerBatchProcessor:
         if self.eval:
             epoch = 0
 
-        self.generator.manual_seed(epoch * 10_000 + batch_idx)
+        self.rng.seed(epoch * 10_000 + batch_idx)
 
-        use_pred = torch.rand(1, generator=self.generator, device='cpu').item() < self.sampler.get_prob(epoch) or self.eval
-        batch = pred if use_pred else true
 
-        N = batch.size(0)
+        N = true.size(0)
         input_frames = []
         target_frames = []
 
         for i in range(N):
-            frame = batch[i]                     # (13, H, W)
-            arrival = frame[1]                   # arrival times
-            max_arr = arrival.max().item()
-
-            in_frame = frame if use_pred else self.burner(frame, t)
-            out_frame = self.burner(frame, t + self.dt)
+            use_pred = self.rng.rand().item() < self.sampler.get_prob(epoch) or self.eval
+            in_frame = pred[i] if use_pred else self.burner(true[i], t)
+            out_frame = self.burner(true[i], t + self.dt)
 
             # Build the 14-channel input: add t as a constant channel
             t_channel = torch.full((1, in_frame.shape[-2], in_frame.shape[-1]), t, device=in_frame.device)
@@ -102,7 +98,7 @@ class ForwardBurnTrainer:
         self.max_t = max_t
 
     def load_checkpoint(self, checkpoint_path):
-        checkpoint = torch.load(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
         self.current_epoch = checkpoint['epoch'] + 1
         self.model.load_state_dict(checkpoint['model'])
         self.optimizer.load_state_dict(checkpoint['optimizer'])

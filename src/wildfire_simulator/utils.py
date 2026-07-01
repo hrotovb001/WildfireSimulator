@@ -1,19 +1,9 @@
 import numpy as np
+import torch
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-
 def save_frame(data, filepath):
-    """
-    Save a multi-channel frame as a PNG image using matplotlib.
-
-    Parameters
-    ----------
-    data : np.ndarray
-        Array of shape (C, H, W) where C is the number of channels.
-    filepath : str or Path
-        Path where the image will be saved.
-    """
     n_channels = data.shape[0]
 
     # Determine a roughly square grid that can hold all channels
@@ -43,26 +33,14 @@ def save_frame(data, filepath):
 
 
 def save_comparison(data_pred, data_true, filepath):
-    """
-    Save a side-by-side comparison of predicted and true frames.
+    n_samples = data_pred.shape[0]
 
-    Parameters
-    ----------
-    data_pred : np.ndarray
-        Array of shape (C, H, W) for prediction.
-    data_true : np.ndarray
-        Array of shape (C, H, W) for ground truth.
-    filepath : str or Path
-        Path where the image will be saved.
-    """
-    n_channels = data_pred.shape[0]
-
-    # Two rows (predictions and true) and n_channels columns
+    # Two rows (predictions and true) and n_samples columns
     fig, axes = plt.subplots(
-        2, n_channels, figsize=(n_channels * 2, 4), squeeze=False
+        2, n_samples, figsize=(n_samples * 2, 4), squeeze=False
     )
 
-    for i in range(n_channels):
+    for i in range(n_samples):
         ax_pred = axes[0, i]
         ax_pred.imshow(data_pred[i], cmap='gray', aspect='auto')
         ax_pred.axis('off')
@@ -76,4 +54,15 @@ def save_comparison(data_pred, data_true, filepath):
 
     fig.savefig(filepath, bbox_inches='tight', pad_inches=0.1)
     plt.close(fig)
+
+
+class ScalarRNG:
+    def __init__(self):
+        self.generator = torch.Generator()
+
+    def seed(self, seed_value):
+        self.generator.manual_seed(seed_value)
+
+    def rand(self):
+        return torch.rand((), generator=self.generator)
 
