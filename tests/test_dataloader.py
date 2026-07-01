@@ -1,121 +1,58 @@
 import numpy as np
+import pickle
 
 from wildfire_simulator.dataloader import TrialCollection
 
 def test_landscape_layers(dataloader):
     elevation = dataloader.elevation 
-    assert isinstance(elevation, np.ndarray)
-    assert len(elevation.shape) == 2
-    assert elevation.max() != elevation.min()
-    assert not np.isnan(elevation).any()
-    assert not (elevation == -9999).any()
+    elevation_expected = np.load('tests/baseline/elevation.npy')
+    assert (elevation == elevation_expected).all()
 
     slope = dataloader.slope
-    assert isinstance(slope, np.ndarray)
-    assert len(slope.shape) == 2
-    assert slope.max() != slope.min()
-    assert not np.isnan(slope).any()
-    assert not (slope == -9999).any()
+    slope_expected = np.load('tests/baseline/slope.npy')
+    assert (slope == slope_expected).all()
 
     aspect = dataloader.aspect
-    assert isinstance(aspect, np.ndarray)
-    assert len(aspect.shape) == 2
-    assert aspect.max() != aspect.min()
-    assert not np.isnan(aspect).any()
-    assert not (aspect == -9999).any()
+    aspect_expected = np.load('tests/baseline/aspect.npy')
+    assert (aspect == aspect_expected).all()
 
     fuel = dataloader.fuel
-    assert isinstance(fuel, np.ndarray)
-    assert len(fuel.shape) == 2
-    assert fuel.max() != fuel.min()
-    assert not np.isnan(fuel).any()
-    assert not (fuel == -9999).any()
+    fuel_expected = np.load('tests/baseline/fuel.npy')
+    assert (fuel == fuel_expected).all()
 
     canopy_cover = dataloader.canopy_cover
-    assert isinstance(canopy_cover, np.ndarray)
-    assert len(canopy_cover.shape) == 2
-    assert canopy_cover.max() != canopy_cover.min()
-    assert not np.isnan(canopy_cover).any()
-    assert not (canopy_cover == -9999).any()
+    canopy_cover_expected = np.load('tests/baseline/canopy_cover.npy')
+    assert (canopy_cover == canopy_cover_expected).all()
 
     stand_height = dataloader.stand_height
-    assert isinstance(stand_height, np.ndarray)
-    assert len(stand_height.shape) == 2
-    assert stand_height.max() != stand_height.min()
-    assert not np.isnan(stand_height).any()
-    assert not (stand_height == -9999).any()
+    stand_height_expected = np.load('tests/baseline/stand_height.npy')
+    assert (stand_height == stand_height_expected).all()
 
     canopy_base_height = dataloader.canopy_base_height
-    assert isinstance(canopy_base_height, np.ndarray)
-    assert len(canopy_base_height.shape) == 2
-    assert canopy_base_height.max() != canopy_base_height.min()
-    assert not np.isnan(canopy_base_height).any()
-    assert not (canopy_base_height == -9999).any()
+    canopy_base_height_expected = np.load('tests/baseline/canopy_base_height.npy')
+    assert (canopy_base_height == canopy_base_height_expected).all()
 
     canopy_bulk_density = dataloader.canopy_bulk_density
-    assert isinstance(canopy_bulk_density, np.ndarray)
-    assert len(canopy_bulk_density.shape) == 2
-    assert canopy_bulk_density.max() != canopy_bulk_density.min()
-    assert not np.isnan(canopy_bulk_density).any()
-    assert not (canopy_bulk_density == -9999).any()
-
+    canopy_bulk_density_expected = np.load('tests/baseline/canopy_bulk_density.npy')
+    assert (canopy_bulk_density == canopy_bulk_density_expected).all()
 
 def test_ignitions(dataloader):
-    # ignitions are a dict where key is the ignition number (int)
-    # and the value is the ignition
-    # the ignition number comes from the file name "ignition_%d.shp"
     ignitions = dataloader.ignitions
-    assert len(ignitions) > 0
-    assert isinstance(ignitions, dict)
-
-    # verify that every key is an int and every value is a valid pixel
-    for k, v in ignitions.items():
-        assert isinstance(k, int)
-        assert isinstance(v, tuple)
-        assert len(v) == 2
-        assert all(isinstance(x, int) for x in v)
-
-    # pick the first ignition and confirm it lies inside the landscape
-    first_key = next(iter(ignitions))
-    ignition = ignitions[first_key]
-    y, x = ignition
-    elevation = dataloader.elevation
-    assert y >= 0 and y < elevation.shape[0]
-    assert x >= 0 and x < elevation.shape[1]
-
+    with open("tests/baseline/ignitions.pkl", "rb") as file:
+        ignitions_expected = pickle.load(file)
+    assert ignitions == ignitions_expected
 
 def test_trials(dataloader):
     trials = dataloader.trials
-    assert len(trials) > 0
+    with open("tests/baseline/trials.pkl", "rb") as file:
+        trials_expected = pickle.load(file)
 
-    # each trial has fire, ignition number, windspeed,
-    # winddir, foliar_moisture
-    trial = trials[0]
-    assert isinstance(trial, dict)
-
-    # each fire has a mask and a fire arrival time channel
-    fire = trial["fire"]
-    assert len(fire.shape) == 3
-    assert fire.shape[0] == 2
-
-    # the mask indicates where the fire has been (0 or 1)
-    mask = fire[0]
-    assert ((mask == 0) | (mask == 1)).all()
-
-    # the arrival time indicates the time at which the fire reached a pixel (default to value of 0 for masked pixels)
-    arrival = fire[1]
-    assert not np.isnan(arrival).any()
-    assert not (arrival == -9999).any()
-
-    # all other properties are int
-    assert isinstance(trial["ignition"], int)
-    assert isinstance(trial["windspeed"], int)
-    assert isinstance(trial["winddir"], int)
-    assert isinstance(trial["foliar_moisture"], int)
-
-    # file path where trial comes from
-    assert isinstance(trial["file_path"], str)
-
+    for idx, trial in enumerate(trials):
+        for k, v in trial.items():
+            if k == "fire":
+                assert (v == trials_expected[idx]["fire"]).all()
+            else:
+                assert v == trials_expected[idx][k]
 
 def test_trial_collection_laziness():
     class FakeTrialFileLoader:

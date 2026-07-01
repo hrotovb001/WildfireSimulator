@@ -16,6 +16,7 @@ from wildfire_simulator.forward_burn_process import ForwardBurnProcess
 from wildfire_simulator.models import MK_UNet_Regression
 from wildfire_simulator.trainers import ForwardBurnTrainer, BurnerBatchProcessor
 from wildfire_simulator.scheduled_sampler import ScheduledSampler
+from wildfire_simulator.utils import ScalarRNG
 
 def test_batch_processor(dataloader):
     dataset = WildfireDataset(dataloader)
@@ -24,92 +25,64 @@ def test_batch_processor(dataloader):
 
     sampler = ScheduledSampler(k=0.1, t0=40)
 
-    # input_tensor uses burner at t
-    # output_tensor uses burner at t + dt
-    # each item of batch uses a different t
-    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, eval=False, sampler=sampler)
-    pred = torch.stack([dataset[1], dataset[0]])
-    true = torch.stack([dataset[0], dataset[1]])
-    input_tensor, output_tensor = batch_processor(pred, true, epoch=1, batch_idx=0, t=30)
-
-    # the 14th channel is t broadcasted to all 512 x 512
-    # the data is 500, 500 in last two dims but it must be
-    # zero padded to a multiple of 32
-    assert input_tensor.shape == (2, 14, 512, 512)
-    assert output_tensor.shape == (2, 2, 512, 512)
-
-    input_tensor2, output_tensor2 = batch_processor(pred, true, epoch=1, batch_idx=0, t=30)
-    assert torch.equal(input_tensor, input_tensor2)
-    assert torch.equal(output_tensor, output_tensor2)
-    
-    input_tensor3, output_tensor3 = batch_processor(pred, true, epoch=1, batch_idx=0, t=60)
-    assert not torch.equal(input_tensor, input_tensor3)
-    assert not torch.equal(output_tensor, output_tensor3)
-
-    batch_processor = BurnerBatchProcessor(burner=burner, dt=30, eval=True, sampler=sampler)
-
-    input_tensor5, output_tensor5 = batch_processor(pred, true, epoch=1, batch_idx=0, t=30)
-    assert not torch.equal(input_tensor, input_tensor5)
-
-def test_batch_processor_probabilistic(dataloader):
-    dataset = WildfireDataset(dataloader)
-    burner = ForwardBurnProcess()
-
-    class TrueSampler():
+    class ConstSampler():
+        def __init__(self, prob):
+            self.prob = prob
         def get_prob(self, epoch):
-            return 0.1
-    trueSampler = TrueSampler()
+            return self.prob
 
-    class PredSampler():
-        def get_prob(self, epoch):
-            return 0.9
-    predSampler = PredSampler()
+    class DummyScalarRNG:
+        def __init__(self, constant_value = 0.5):
+            self.constant_value = constant_value
+            self.last_seed_used = None
 
-    pred = torch.stack([dataset[1], dataset[0]])
-    true = torch.stack([dataset[0], dataset[1]])
-    
-    h, w = true.shape[-2], true.shape[-1]
-    pad_h = (32 - h % 32) % 32
-    pad_w = (32 - w % 32) % 32
-    
-    true = torch.nn.functional.pad(true, (0, pad_w, 0, pad_h))
-    pred = torch.nn.functional.pad(pred, (0, pad_w, 0, pad_h))
-    
-    true_burned = torch.stack([burner(true[i], 30) for i in range(true.size(0))])
-    
-    count = 0
+        def seed(self, seed_value):
+            self.last_seed_used = seed_value
+
+        def rand(self):
+            return torch.tensor(self.constant_value, dtype=torch.float32)
+
+    rng = DummyScalarRNG(0.5)
     batch_processor = BurnerBatchProcessor(
         burner=burner,
         dt=30,
         eval=False,
-        sampler=trueSampler,
+        sampler=ConstSampler(0.4),
+        rng=rng
     )
+    assert batch_processor.dt == 30
+
+    pred = torch.stack([dataset[1], dataset[0]])
+    true = torch.stack([dataset[0], dataset[1]])
+
+    input_tensor, output_tensor = batch_processor(pred, true, epoch=6, batch_idx=7, t=60)
+    assert rng.last_seed_used == 60007
     
-    for i in range(100):
-        input_tensor, _ = batch_processor(pred, true, epoch=i, batch_idx=0, t=30)
-        time_tensor = torch.full((pred.shape[0], 1, 512, 512), 30)
-    
-        if torch.equal(torch.cat([true_burned, time_tensor], dim=1), input_tensor):
-            count += 1
-    
-    assert count > 80
-    
-    count = 0
+    input_tensor_expected = torch.load("tests/baseline/batch_processor/input_forced.pt")
+    output_tensor_expected = torch.load("tests/baseline/batch_processor/output_forced.pt")
+
+    assert (input_tensor == input_tensor_expected).all()
+    assert (output_tensor == output_tensor_expected).all()
+
+    rng = DummyScalarRNG(0.2)
     batch_processor = BurnerBatchProcessor(
         burner=burner,
         dt=30,
         eval=False,
-        sampler=predSampler,
+        sampler=ConstSampler(0.3),
+        rng=rng
     )
-    
-    for i in range(100):
-        input_tensor, _ = batch_processor(pred, true, epoch=i, batch_idx=0, t=30)
-        time_tensor = torch.full((pred.shape[0], 1, 512, 512), 30)
-    
-        if torch.equal(torch.cat([pred, time_tensor], dim=1), input_tensor):
-            count += 1
-    
-    assert count > 80
+    assert batch_processor.dt == 30
+
+    input_tensor, output_tensor = batch_processor(pred, true, epoch=8, batch_idx=9, t=90)
+    assert rng.last_seed_used == 80009
+
+    input_tensor_expected = torch.load("tests/baseline/batch_processor/input_autoreg.pt")
+    output_tensor_expected = torch.load("tests/baseline/batch_processor/output_autoreg.pt")
+
+    assert (input_tensor == input_tensor_expected).all()
+    assert (output_tensor == output_tensor_expected).all()
+
 
 def test_trainer(dataloader):
     torch.manual_seed(42)
@@ -121,7 +94,13 @@ def test_trainer(dataloader):
     burner = ForwardBurnProcess()
 
     # share same batch_processor for train and test to allow model to overfit
-    batch_processor = BurnerBatchProcessor(burner=burner, dt=1/48, eval=True, sampler=ScheduledSampler(k=0.1, t0=40))
+    batch_processor = BurnerBatchProcessor(
+        burner=burner,
+        dt=1/48,
+        eval=True,
+        sampler=ScheduledSampler(k=0.1, t0=40),
+        rng=ScalarRNG()
+    )
 
     # share loader for the same reason as above
     loader = DataLoader(
