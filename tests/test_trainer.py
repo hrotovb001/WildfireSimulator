@@ -57,12 +57,28 @@ def test_batch_processor(dataloader):
 
     input_tensor, output_tensor = batch_processor(pred, true, epoch=6, batch_idx=7, t=60)
     assert rng.last_seed_used == 60007
+
+    batch_processor = BurnerBatchProcessor(
+        burner=burner,
+        dt=30,
+        eval=False,
+        sampler=ConstSampler(0.4),
+        rng=rng
+    )
+    assert batch_processor.dt == 30
+
+    pred = torch.stack([dataset[1], dataset[0]])
+    true = torch.stack([dataset[0], dataset[1]])
+
+    input_tensor2, output_tensor2 = batch_processor(pred, true, epoch=9, batch_idx=10, t=60)
     
     input_tensor_expected = torch.load("tests/baseline/batch_processor/input_forced.pt")
     output_tensor_expected = torch.load("tests/baseline/batch_processor/output_forced.pt")
 
     assert (input_tensor == input_tensor_expected).all()
+    assert (input_tensor2 == input_tensor_expected).all()
     assert (output_tensor == output_tensor_expected).all()
+    assert (output_tensor2 == output_tensor_expected).all()
 
     rng = DummyScalarRNG(0.2)
     batch_processor = BurnerBatchProcessor(
@@ -93,16 +109,20 @@ def test_trainer(dataloader):
 
     burner = ForwardBurnProcess()
 
-    # share same batch_processor for train and test to allow model to overfit
-    batch_processor = BurnerBatchProcessor(
+    train_batch_processor = BurnerBatchProcessor(
         burner=burner,
         dt=1/48,
-        eval=True,
+        eval=False,
         sampler=ScheduledSampler(k=0.1, t0=40),
         rng=ScalarRNG()
     )
+    val_batch_processor = BurnerBatchProcessor(
+        burner=burner,
+        dt=1/48,
+        eval=True
+    )
 
-    # share loader for the same reason as above
+    # share loader for train and val
     loader = DataLoader(
         dataset=dataset,
         batch_size=1,
@@ -145,8 +165,8 @@ def test_trainer(dataloader):
             loss_fn=nn.BCELoss(),
             train_loader=loader,
             val_loader=loader,
-            train_batch_processor = batch_processor,
-            val_batch_processor = batch_processor,
+            train_batch_processor = train_batch_processor,
+            val_batch_processor = val_batch_processor,
             callbacks=[checkpoint_cb, tensorboard_cb],
             epochs=epochs,
             max_t=3/48

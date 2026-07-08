@@ -8,7 +8,6 @@ from wildfire_simulator.scheduled_sampler import ScheduledSampler
 import numpy as np
 
 def _pad_to_multiple(tensor, multiple=32):
-    """Pad the last two spatial dimensions to the next multiple of `multiple`."""
     _, _, h, w = tensor.shape
     pad_h = (multiple - h % multiple) % multiple
     pad_w = (multiple - w % multiple) % multiple
@@ -25,8 +24,8 @@ class BurnerBatchProcessor:
         burner,
         dt,
         eval,
-        sampler,
-        rng
+        sampler=None,
+        rng=None
     ):
         self.burner = burner
         self.dt = dt
@@ -35,10 +34,8 @@ class BurnerBatchProcessor:
         self.sampler = sampler
 
     def __call__(self, pred, true, epoch, batch_idx, t):
-        if self.eval:
-            epoch = 0
-
-        self.rng.seed(epoch * 10_000 + batch_idx)
+        if not self.eval:
+            self.rng.seed(epoch * 10_000 + batch_idx)
 
 
         N = true.size(0)
@@ -46,20 +43,19 @@ class BurnerBatchProcessor:
         target_frames = []
 
         for i in range(N):
-            use_pred = self.rng.rand().item() < self.sampler.get_prob(epoch) or self.eval
+            use_pred = self.eval or self.rng.rand().item() < self.sampler.get_prob(epoch)
             in_frame = pred[i] if use_pred else self.burner(true[i], t)
             out_frame = self.burner(true[i], t + self.dt)
 
-            # Build the 14-channel input: add t as a constant channel
             t_channel = torch.full((1, in_frame.shape[-2], in_frame.shape[-1]), t, device=in_frame.device)
-            in_with_t = torch.cat([in_frame, t_channel], dim=0)   # (14, H, W)
-            target = torch.stack([out_frame[0], out_frame[1]], dim=0)   # (2, H, W)
+            in_with_t = torch.cat([in_frame, t_channel], dim=0)
+            target = torch.stack([out_frame[0], out_frame[1]], dim=0)
 
-            input_frames.append(in_with_t.unsqueeze(0))   # (1,14,H,W)
-            target_frames.append(target.unsqueeze(0))     # (1,2,H,W)
+            input_frames.append(in_with_t.unsqueeze(0))
+            target_frames.append(target.unsqueeze(0))
 
-        inputs = torch.cat(input_frames, dim=0)   # (N, 14, H, W)
-        targets = torch.cat(target_frames, dim=0) # (N, 2, H, W)
+        inputs = torch.cat(input_frames, dim=0)
+        targets = torch.cat(target_frames, dim=0)
 
         # Pad spatial dimensions to the next multiple of 32 (the raw data is
         # 500×500 → 512×512).
@@ -111,6 +107,7 @@ class ForwardBurnTrainer:
 
         pbar = tqdm(self.train_loader, desc=f"Epoch {epoch}")
         for batch_idx, batch in enumerate(pbar):
+            num_steps = int(self.max_t / self.train_batch_processor.dt)
             for t in np.arange(0, self.max_t, self.train_batch_processor.dt):
                 inputs, targets = self.train_batch_processor(preds_padded, batch, epoch=epoch, batch_idx=batch_idx, t=t)
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
@@ -128,7 +125,7 @@ class ForwardBurnTrainer:
                 preds_padded = inputs[:, :13, :, :].detach().cpu().clone()
                 preds_padded[:, :2, :, :] = pred_out.detach().cpu()
 
-                total_loss += loss.item() * N * self.train_batch_processor.dt / self.max_t
+                total_loss += loss.item() * N / num_steps
                 pbar.set_postfix(loss=f"{loss.item():.4f}")
 
         return total_loss / n_samples
