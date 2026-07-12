@@ -58,27 +58,11 @@ def test_batch_processor(dataloader):
     input_tensor, output_tensor = batch_processor(pred, true, epoch=6, batch_idx=7, t=60)
     assert rng.last_seed_used == 60007
 
-    batch_processor = BurnerBatchProcessor(
-        burner=burner,
-        dt=30,
-        eval=False,
-        sampler=ConstSampler(0.4),
-        rng=rng
-    )
-    assert batch_processor.dt == 30
-
-    pred = torch.stack([dataset[1], dataset[0]])
-    true = torch.stack([dataset[0], dataset[1]])
-
-    input_tensor2, output_tensor2 = batch_processor(pred, true, epoch=9, batch_idx=10, t=60)
-    
     input_tensor_expected = torch.load("tests/baseline/batch_processor/input_forced.pt")
     output_tensor_expected = torch.load("tests/baseline/batch_processor/output_forced.pt")
 
     assert (input_tensor == input_tensor_expected).all()
-    assert (input_tensor2 == input_tensor_expected).all()
     assert (output_tensor == output_tensor_expected).all()
-    assert (output_tensor2 == output_tensor_expected).all()
 
     rng = DummyScalarRNG(0.2)
     batch_processor = BurnerBatchProcessor(
@@ -93,11 +77,25 @@ def test_batch_processor(dataloader):
     input_tensor, output_tensor = batch_processor(pred, true, epoch=8, batch_idx=9, t=90)
     assert rng.last_seed_used == 80009
 
+    batch_processor = BurnerBatchProcessor(
+        burner=burner,
+        dt=30,
+        eval=True
+    )
+    assert batch_processor.dt == 30
+
+    pred = torch.stack([dataset[1], dataset[0]])
+    true = torch.stack([dataset[0], dataset[1]])
+
+    input_tensor2, output_tensor2 = batch_processor(pred, true, epoch=10, batch_idx=11, t=90)
+
     input_tensor_expected = torch.load("tests/baseline/batch_processor/input_autoreg.pt")
     output_tensor_expected = torch.load("tests/baseline/batch_processor/output_autoreg.pt")
 
     assert (input_tensor == input_tensor_expected).all()
+    assert (input_tensor2 == input_tensor_expected).all()
     assert (output_tensor == output_tensor_expected).all()
+    assert (output_tensor2 == output_tensor_expected).all()
 
 
 def test_trainer(dataloader):

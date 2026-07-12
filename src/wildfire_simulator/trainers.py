@@ -3,8 +3,6 @@ import torch.nn.functional as F
 
 from tqdm import tqdm
 
-from wildfire_simulator.scheduled_sampler import ScheduledSampler
-
 import numpy as np
 
 def _pad_to_multiple(tensor, multiple=32):
